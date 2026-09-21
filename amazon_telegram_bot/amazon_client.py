@@ -25,6 +25,13 @@ class AmazonClient:
             data={
                 "cookie_jar_path": os.path.join(config.amazon_config_dir, "cookies.json"),
                 "output_dir": os.path.join(config.amazon_config_dir, "output"),
+                # Amazon's ACIC/JS challenges are otherwise a hard stop (AmazonOrdersAuthError).
+                # These forms use the [browser] extra's headless Playwright/chromium to solve
+                # them automatically - see docker/Dockerfile's `playwright install chromium`.
+                "auth_forms_classes": [
+                    "amazonorders.contrib.browser.playwright.PlaywrightAcicForm",
+                    "amazonorders.contrib.browser.playwright.PlaywrightJSAuthForm",
+                ],
             },
         )
         self._session = AmazonSession(

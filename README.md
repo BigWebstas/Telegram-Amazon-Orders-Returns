@@ -30,7 +30,8 @@ bot will send you a Telegram message telling you to re-run step 3.
 
 ## Commands
 
-- `/orders [year]` — recent orders, or all orders for a given year.
+- `/orders` — active orders from the last 30 days (not delivered, not cancelled).
+- `/orders <year>` — all orders for that year, unfiltered.
 - `/transactions` — recent account transactions.
 - `/status` — session health and last successful poll time.
 - `/returns` — currently replies that returns tracking isn't implemented.

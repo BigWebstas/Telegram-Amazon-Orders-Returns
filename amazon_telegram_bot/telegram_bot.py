@@ -12,6 +12,24 @@ def _authorized(config: Config, update: Update) -> bool:
     return bool(update.effective_chat) and update.effective_chat.id == config.telegram_chat_id
 
 
+def _is_active(order) -> bool:
+    if order.cancelled:
+        return False
+    if not order.shipments:
+        return True
+    return not all(
+        (shipment.delivery_status or "").strip().lower().startswith("delivered")
+        for shipment in order.shipments
+    )
+
+
+def _order_status(order) -> str:
+    if order.cancelled:
+        return "Cancelled"
+    statuses = {s.delivery_status for s in order.shipments if s.delivery_status}
+    return "; ".join(sorted(statuses)) if statuses else "Processing"
+
+
 def build_application(config: Config, amazon: AmazonClient, storage: Storage) -> Application:
     app = Application.builder().token(config.telegram_bot_token).build()
 
@@ -24,15 +42,20 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
                 orders = await asyncio.to_thread(amazon.fetch_orders_for_year, year)
             else:
                 orders = await asyncio.to_thread(amazon.fetch_recent_orders, "last30")
+                orders = [o for o in orders if _is_active(o)]
         except SessionNotReady as exc:
             await update.message.reply_text(str(exc))
             return
 
         if not orders:
-            await update.message.reply_text("No orders found.")
+            message = "No orders found." if year else "No active orders."
+            await update.message.reply_text(message)
             return
 
-        lines = [f"{o.order_number} - ${o.grand_total:.2f} - {o.order_placed_date}" for o in orders[:20]]
+        lines = [
+            f"{o.order_number} - ${o.grand_total:.2f} - {_order_status(o)}"
+            for o in orders[:20]
+        ]
         await update.message.reply_text("\n".join(lines))
 
     async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

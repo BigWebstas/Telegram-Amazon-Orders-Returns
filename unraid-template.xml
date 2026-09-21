@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>telegram-amazon-orders-returns</Name>
+  <Repository>ghcr.io/bigwebstas/telegram-amazon-orders-returns:latest</Repository>
+  <Registry>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns/pkgs/container/telegram-amazon-orders-returns</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns/issues</Support>
+  <Project>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns</Project>
+  <Overview>Polls your own Amazon account for order and transaction activity (via the unofficial amazon-orders library) and pushes updates to Telegram. No web UI - interact through Telegram bot commands (/orders, /transactions, /status). Returns QR tracking is not implemented yet.</Overview>
+  <Category>Tools:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/bigwebstas/Telegram-Amazon-Orders-Returns/main/unraid-template.xml</TemplateURL>
+  <Icon></Icon>
+  <ExtraParams/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Polls your own Amazon account for order and transaction activity and pushes updates to Telegram.</Description>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/telegram-amazon-orders-returns" Mode="rw" Description="Persistent Amazon session cookies and the sqlite tracking DB. Do not delete between restarts - the session is stored here." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/telegram-amazon-orders-returns</Config>
+  <Config Name="Amazon Email" Target="AMAZON_EMAIL" Default="" Mode="" Description="Amazon account email address to poll." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Amazon Password" Target="AMAZON_PASSWORD" Default="" Mode="" Description="Amazon account password." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Telegram Bot Token" Target="TELEGRAM_BOT_TOKEN" Default="" Mode="" Description="Bot token from @BotFather on Telegram." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Telegram Chat ID" Target="TELEGRAM_CHAT_ID" Default="" Mode="" Description="Your personal Telegram chat id (from @userinfobot). Only this chat is served." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Poll Interval Minutes" Target="POLL_INTERVAL_MINUTES" Default="30" Mode="" Description="How often to poll Amazon for new orders/transactions, in minutes." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+</Container>

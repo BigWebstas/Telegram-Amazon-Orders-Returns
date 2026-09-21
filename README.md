@@ -1,4 +1,4 @@
-# Telegram Amazon Returns
+# Telegram Amazon Orders & Returns
 
 A personal Telegram bot that polls your own Amazon account for order and
 transaction activity, using the unofficial [`amazon-orders`](https://github.com/alexdlaird/amazon-orders)

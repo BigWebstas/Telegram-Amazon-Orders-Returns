@@ -31,7 +31,12 @@ bot will send you a Telegram message telling you to re-run step 3.
 ## Commands
 
 - `/orders` — orders from the last 30 days currently in "Arriving" status.
-- `/orders <year>` — all orders for that year, unfiltered.
+  Reads from the local cache the poller keeps updated, so it's as fresh as
+  the last poll cycle (up to `POLL_INTERVAL_MINUTES`) rather than a live
+  Amazon lookup - it doesn't call Amazon at all, except automatically once
+  before the very first poll has ever run.
+- `/orders <year>` — all orders for that year, unfiltered. Always live,
+  since a specific year is outside the poller's 30-day cache window.
 - `/delivered` — orders delivered in the last 3 days. Only counts
   deliveries the bot itself observed while polling (a status transition
   to "Delivered"), not ones that already happened before it started.

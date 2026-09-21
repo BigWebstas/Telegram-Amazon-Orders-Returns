@@ -15,13 +15,10 @@ def _authorized(config: Config, update: Update) -> bool:
     return bool(update.effective_chat) and update.effective_chat.id == config.telegram_chat_id
 
 
-def _is_active(order) -> bool:
-    if order.cancelled:
+def _is_active_status(status: str | None, cancelled: bool) -> bool:
+    if cancelled:
         return False
-    return any(
-        (shipment.delivery_status or "").strip().lower().startswith("arriving")
-        for shipment in order.shipments
-    )
+    return (status or "").strip().lower().startswith("arriving")
 
 
 def _order_status(order) -> str:
@@ -38,24 +35,45 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
         if not _authorized(config, update):
             return
         year = int(context.args[0]) if context.args else None
-        try:
-            if year:
+
+        if year:
+            # A specific year is always outside the poller's rolling 30-day
+            # cache, so this still has to hit Amazon live.
+            try:
                 orders = await asyncio.to_thread(amazon.fetch_orders_for_year, year)
-            else:
-                orders = await asyncio.to_thread(amazon.fetch_recent_orders, "last30")
-                orders = [o for o in orders if _is_active(o)]
-        except SessionNotReady as exc:
-            await update.message.reply_text(str(exc))
+            except SessionNotReady as exc:
+                await update.message.reply_text(str(exc))
+                return
+            if not orders:
+                await update.message.reply_text("No orders found.")
+                return
+            lines = [f"{o.order_number} - ${o.grand_total:.2f} - {_order_status(o)}" for o in orders[:20]]
+            await update.message.reply_text("\n".join(lines))
             return
 
-        if not orders:
-            message = "No orders found." if year else "No active orders."
-            await update.message.reply_text(message)
+        # No year: serve from the poller's cache instead of calling Amazon,
+        # unless the cache hasn't been populated by a poll cycle yet.
+        rows = storage.get_cached_orders()
+        if not rows and storage.get_last_poll_at() is None:
+            try:
+                orders = await asyncio.to_thread(amazon.fetch_recent_orders, "last30")
+            except SessionNotReady as exc:
+                await update.message.reply_text(str(exc))
+                return
+            rows = [
+                (o.order_number, o.shipments[0].delivery_status if o.shipments else None, o.grand_total, o.cancelled)
+                for o in orders
+            ]
+
+        active = [(number, status, total) for number, status, total, cancelled in rows
+                  if _is_active_status(status, cancelled)]
+        if not active:
+            await update.message.reply_text("No active orders.")
             return
 
         lines = [
-            f"{o.order_number} - ${o.grand_total:.2f} - {_order_status(o)}"
-            for o in orders[:20]
+            f"{number} - {f'${total:.2f}' if total is not None else 'unknown total'} - {status}"
+            for number, status, total in active[:20]
         ]
         await update.message.reply_text("\n".join(lines))
 

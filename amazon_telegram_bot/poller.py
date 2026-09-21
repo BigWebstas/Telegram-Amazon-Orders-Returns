@@ -81,7 +81,7 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         # true delivery date, so it's left out of /delivered rather than guessed.
         if became_delivered:
             storage.mark_delivered(order.order_number, now)
-        storage.upsert_order(order.order_number, status, now, order.grand_total)
+        storage.upsert_order(order.order_number, status, now, order.grand_total, order.cancelled)
 
     transactions = await asyncio.to_thread(amazon.fetch_transactions)
     for transaction in transactions:

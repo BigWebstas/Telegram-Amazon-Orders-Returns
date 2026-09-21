@@ -41,8 +41,16 @@ bot will send you a Telegram message telling you to re-run step 3.
 - `/returns` — currently replies that returns tracking isn't implemented.
 
 The bot also polls in the background (every `POLL_INTERVAL_MINUTES`,
-default 30) and pushes a message for any new order, order status change, or
-new transaction.
+default 30) and pushes a message the moment it sees:
+
+- 🆕 a new order placed
+- ✅ an order becoming delivered
+- 📦 any other shipment status change
+- 💳 a new transaction
+
+On the very first poll after install, existing orders/transactions are
+recorded silently instead of all being reported as "new" - only changes
+from that point on get pushed.
 
 ## Returns QR status
 

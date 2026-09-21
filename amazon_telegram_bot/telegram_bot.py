@@ -28,6 +28,11 @@ def _order_status(order) -> str:
     return "; ".join(sorted(statuses)) if statuses else "Processing"
 
 
+def _format_order_listing_message(order_number: str, total: float | None, status: str) -> str:
+    total_str = f"${total:.2f}" if total is not None else "unknown total"
+    return f"\U0001F4E6 Order {order_number}\n{total_str}\n{status}"
+
+
 def build_application(config: Config, amazon: AmazonClient, storage: Storage) -> Application:
     app = Application.builder().token(config.telegram_bot_token).build()
 
@@ -47,8 +52,10 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             if not orders:
                 await update.message.reply_text("No orders found.")
                 return
-            lines = [f"{o.order_number} - ${o.grand_total:.2f} - {_order_status(o)}" for o in orders[:20]]
-            await update.message.reply_text("\n".join(lines))
+            for o in orders[:20]:
+                await update.message.reply_text(
+                    _format_order_listing_message(o.order_number, o.grand_total, _order_status(o))
+                )
             return
 
         # No year: serve from the poller's cache instead of calling Amazon,
@@ -71,11 +78,8 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             await update.message.reply_text("No active orders.")
             return
 
-        lines = [
-            f"{number} - {f'${total:.2f}' if total is not None else 'unknown total'} - {status}"
-            for number, status, total in active[:20]
-        ]
-        await update.message.reply_text("\n".join(lines))
+        for number, status, total in active[:20]:
+            await update.message.reply_text(_format_order_listing_message(number, total, status))
 
     async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):

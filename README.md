@@ -66,24 +66,28 @@ from that point on get pushed.
 Implemented, based on two real walkthroughs (2026-09-21) since
 `amazon-orders` doesn't cover returns at all. Confirmed and working:
 
-- Listing in-progress returns from `https://www.amazon.com/your-returns`
+- Listing in-progress returns from `https://www.amazon.com/your-returns`,
+  parsed per return card (`<div class="item-return-history-card">`), a
+  real, confirmed boundary - not page-wide guessing
 - Distinguishing a return's own ID (`rmaId`) from its order number - one
   order can have more than one return
+- Item description, pulled from each card's own product link
+  (`<a class="a-size-base a-link-normal" href="*/dp/*">`), confirmed
+  against multiple real cards
 - Fetching the QR image, which turned out to be a plain presigned S3 URL,
   no browser/Playwright needed for this part
-- Detecting a completed return via its status text - three confirmed
-  phrasings ("we have issued your refund", "your refund was issued",
-  "refund issued"), checked first and always wins even if the page also
-  still shows "Return in transit" or a QR image, both of which can
-  outlive completion
-- "Return in transit" confirmed as an active (non-terminal) status label
+- Detecting a completed return via its status text - two confirmed
+  declarative phrasings ("we have issued your refund", "your refund was
+  issued"), checked first and always wins even if the page also still
+  shows "Return in transit" or a QR image, both of which can outlive
+  completion. A shorter "refund issued" phrase was tried and reverted -
+  it's also the label a step timeline uses for an *upcoming*, not-yet-
+  reached step, which was wrongly excluding genuinely active returns.
+- "Return in transit" and "Return by [date]" confirmed as active
+  (non-terminal) status labels
 
 Still a guess, not yet observed directly:
 - "Drop off by [date]" as the pre-shipment status text
-- Item description has no confirmed pattern - falls back to a generic
-  "Return" label. An earlier version guessed a pattern from the wrong
-  page (order details, not the returns page) and got it wrong; reverted
-  rather than guess again without real HTML to check against.
 
 See `amazon_telegram_bot/returns_qr.py`'s docstring for the full breakdown.
 If `/returns` or a return notification looks off, it's likely one of

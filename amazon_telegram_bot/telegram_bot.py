@@ -128,7 +128,7 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
                 await update.message.reply_photo(photo=photo_bytes, caption=f"Return QR for order {_ret.order_number}")
 
             await returns_qr.send_return_qr_if_ready(
-                amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo
+                amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo, force=True
             )
 
     async def delivered_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

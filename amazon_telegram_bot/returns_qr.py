@@ -264,14 +264,20 @@ async def send_return_qr_if_ready(
     return_id: str,
     return_details_link: str,
     send_photo: Callable[[bytes], Awaitable[None]],
+    *,
+    force: bool = False,
 ) -> bool:
-    """Fetch and deliver a return's QR code once, via the given send_photo callback.
+    """Fetch and deliver a return's QR code, via the given send_photo callback.
 
     Shared by poller.py (proactive push) and telegram_bot.py (/returns
-    on-demand) so both go through the same "already sent?" bookkeeping
-    instead of duplicating it. Returns True if a QR was actually sent.
+    on-demand). By default only sends once ever (storage-backed dedup),
+    which is what the poller wants - it shouldn't re-push the same QR
+    every poll cycle. Pass force=True (as /returns does) to resend
+    on-demand regardless of that history - a user explicitly asking for
+    their returns status wants the QR again, not "already sent, skipped."
+    Returns True if a QR was actually sent.
     """
-    if storage.return_qr_already_sent(return_id):
+    if not force and storage.return_qr_already_sent(return_id):
         return False
 
     try:

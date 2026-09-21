@@ -122,14 +122,18 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             return
 
         for ret in returns:
-            await update.message.reply_text(returns_qr.format_return_message(ret))
+            message_text = returns_qr.format_return_message(ret)
 
-            async def _send_photo(photo_bytes: bytes, _ret=ret) -> None:
-                await update.message.reply_photo(photo=photo_bytes, caption=f"Return QR for order {_ret.order_number}")
+            async def _send_photo(photo_bytes: bytes, _text=message_text) -> None:
+                # Photo caption carries the full status text, so this is one
+                # message instead of a separate text message plus a photo.
+                await update.message.reply_photo(photo=photo_bytes, caption=_text)
 
-            await returns_qr.send_return_qr_if_ready(
+            sent_with_photo = await returns_qr.send_return_qr_if_ready(
                 amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo, force=True
             )
+            if not sent_with_photo:
+                await update.message.reply_text(message_text)
 
     async def delivered_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):

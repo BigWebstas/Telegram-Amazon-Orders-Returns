@@ -101,26 +101,29 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
 
     for ret in returns:
         is_new_return = storage.is_new_return(ret.return_id)
-        if is_new_return and not is_bootstrap:
-            await app.bot.send_message(
-                chat_id=chat_id,
-                text=returns_qr.format_return_message(ret, heading="\U0001F504 Return started"),
-            )
+        should_announce = is_new_return and not is_bootstrap
+        heading = "\U0001F504 Return started" if should_announce else "\U0001F504 Return in progress"
+        message_text = returns_qr.format_return_message(ret, heading=heading)
+
         storage.upsert_return(ret.return_id, ret.order_number, ret.return_status, datetime.datetime.utcnow().isoformat())
 
-        async def _send_photo(photo_bytes: bytes, _ret=ret) -> None:
-            await app.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo_bytes,
-                caption=f"Return QR for order {_ret.order_number}",
-            )
+        async def _send_photo(photo_bytes: bytes, _text=message_text) -> None:
+            # Photo caption carries the full status text, so a return that
+            # already has its QR ready gets one message, not two.
+            await app.bot.send_photo(chat_id=chat_id, photo=photo_bytes, caption=_text)
 
         # Deliberately not gated on is_bootstrap: the QR is something you
         # actually need to complete the return, so a pre-existing one from
         # before the bot started shouldn't be swallowed silently.
-        await returns_qr.send_return_qr_if_ready(
+        sent_with_photo = await returns_qr.send_return_qr_if_ready(
             amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo
         )
+
+        # Only send a bare text announcement if this was actually a new
+        # return AND the combined photo+caption didn't already cover it
+        # (no QR ready yet, or it wasn't a drop-off return at all).
+        if should_announce and not sent_with_photo:
+            await app.bot.send_message(chat_id=chat_id, text=message_text)
 
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())
 

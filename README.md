@@ -83,7 +83,8 @@ before installing on Unraid, since nothing is published until it runs once.
 
 1. In Unraid, go to **Apps → gear icon → Template Repositories** and add:
    `https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns`
-   The app then shows up under **Apps** using [`unraid-template.xml`](unraid-template.xml).
+   The app then shows up under **Apps** using
+   [`templates/telegram-amazon-orders-returns.xml`](templates/telegram-amazon-orders-returns.xml).
    (Alternatively: **Docker → Add Container**, and paste the template's
    `Repository` value and each `Config` variable in by hand.)
 2. Fill in Amazon email/password, Telegram bot token, and Telegram chat id.
@@ -100,9 +101,13 @@ before installing on Unraid, since nothing is published until it runs once.
    main process loads session cookies from disk once at startup, so it won't
    pick up the session `login_cli` just wrote until it restarts.
 
-Note: the template ships with an empty `Icon` field — add one (host it in
-this repo and update the `<Icon>` URL) before publishing it anywhere wider
-than your own Unraid box, or it'll show as a broken image in Apps.
+Note: both the template and [`ca_profile.xml`](ca_profile.xml) (the
+repository-level maintainer profile Community Apps requires for official
+listing) ship with an empty `Icon` field — add one (host it in this repo
+and update both `<Icon>` URLs) before publishing this anywhere wider than
+your own Unraid box or submitting to the official CA listing at
+[ca.unraid.net/submit](https://ca.unraid.net/submit), or it'll show as a
+broken image in Apps.
 
 ## Notes
 

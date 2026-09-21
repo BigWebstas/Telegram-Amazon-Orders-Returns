@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>
+    Unraid template for telegram-amazon-orders-returns, a personal Telegram
+    bot that polls your own Amazon account (via the unofficial amazon-orders
+    library, since Amazon has no buyer-facing API) for order, delivery, and
+    transaction activity, and pushes updates to Telegram. Returns QR-code
+    tracking is wired up end-to-end but not fully implemented yet. Support
+    goes through this repository's GitHub issues.
+  </Profile>
+  <Icon></Icon>
+  <WebPage>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns</WebPage>
+</CommunityApplications>

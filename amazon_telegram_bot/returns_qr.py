@@ -1,62 +1,65 @@
 """Amazon returns tracking and QR code delivery.
 
-Reverse-engineered from a real walkthrough (2026-09-21) rather than
+Reverse-engineered from several real walkthroughs (2026-09-21) rather than
 `amazon-orders`, which doesn't cover returns at all. What's confirmed vs.
 still a best-effort guess:
 
 CONFIRMED:
-- Returns list page: GET https://www.amazon.com/your-returns. Each return's
-  "View return status" button is an <a> with
-  data-event-type="returnHistoryItemCard:viewReturnStatus" - a stable,
-  semantic selector, not a generic CSS class.
-- That link's href is `/spr/returns/prep?contractId=...&rmaId=...&orderId=
-  ...&itemId=...&shipmentId=...&returnSessionId=...`. `rmaId` is Amazon's
-  actual return ID, distinct from `orderId` (one order can have multiple
-  returns) - this is why ReturnSummary.return_id exists separately from
-  order_number. The full link has to be captured from this page and
-  replayed later; it can't be reconstructed from rmaId alone since
-  contractId/itemId/shipmentId are also required to load the page.
+- Returns list page: GET https://www.amazon.com/your-returns. Each return
+  is a <div class="a-box a-spacing-medium item-return-history-card"> -
+  a real, distinctive card boundary (seen in real HTML from two different
+  cards), so parsing is scoped per-card rather than page-wide.
+- Within a card, "View return status" is an <a> with
+  data-event-type="returnHistoryItemCard:viewReturnStatus" - stable and
+  semantic. Its href is `/spr/returns/prep?contractId=...&rmaId=...&
+  orderId=...&itemId=...&shipmentId=...&returnSessionId=...`. `rmaId` is
+  Amazon's actual return ID, distinct from `orderId` (one order can have
+  multiple returns) - this is why ReturnSummary.return_id exists
+  separately from order_number. The full link has to be captured from
+  this page and replayed later; it can't be reconstructed from rmaId
+  alone since contractId/itemId/shipmentId are also required to load
+  the page.
+- Also within a card: the item name is an
+  <a class="a-size-base a-link-normal" href=".../dp/{ASIN}">, confirmed
+  against two different cards. This lives on the *list* page, not the
+  detail page - no need to visit the detail page just for this field.
 - The QR (drop-off returns only) is a plain <img>, not canvas/JS-rendered:
   a presigned S3 URL like
   https://trans-qrcode-images-na.s3.amazonaws.com/<carrier-tracking-number>.gif
   Being presigned, it needs no Amazon auth to fetch - only the page that
   contains the <img src> needs an authenticated request.
-- Confirmed terminal (completed) phrasings: "we have issued your refund",
-  "your refund was issued", and "refund issued" (e.g. "$27.55 refund
-  issued on Sep 20, 2026"). The QR image, and even an "in transit"
-  tracking line, can both still be present after completion, so a
-  terminal-phrase match always wins over any other status text found on
-  the same page - checked first, unconditionally.
-- A completed return's page also shows a dated timeline: "Initiated" ->
-  "Dropped off" -> "Refund issued" -> "Refund credited". These are
-  probably the canonical step names used throughout a return's life (an
-  in-progress return likely only has "Initiated", or "Initiated" +
-  "Dropped off", with dates), but that's not yet confirmed against an
-  actual in-progress example, so it isn't used for status text yet.
+- Terminal (completed) detection: only the declarative heading sentences
+  "we have issued your refund" and "your refund was issued" are used.
+  "Refund issued" alone was tried and reverted - a completed return's
+  detail page also renders a step timeline ("Initiated" -> "Dropped off"
+  -> "Refund issued" -> "Refund credited"), and that same short label
+  apparently also renders for returns that HAVEN'T reached that step yet
+  (confirmed bug: an active, not-yet-dropped-off battery return was
+  wrongly excluded because its page contained "refund issued" as a
+  timeline label, not a completion statement). The two full sentences
+  are declarative status headers, not timeline chrome, so they don't have
+  that problem - checked first, unconditionally, since a completed
+  return's page can still show a QR image or "Return in transit" text.
 - "Return in transit" and "Return by [date]" (the latter seen on the
-  /your-returns list page itself, per-return, alongside "Drop off at any
-  UPS dropoff"/"Drop off at any UPS Store") confirmed as active
-  (non-terminal) status phrases. "Drop off by [date]" specifically is
-  still an unverified guess by analogy.
+  list page itself, per-return, alongside "Drop off at any UPS dropoff"/
+  "Drop off at any UPS Store") confirmed as active (non-terminal) status
+  phrases. "Drop off by [date]" specifically is still an unverified guess
+  by analogy.
 
-CORRECTED: an earlier version of this file parsed item_description from
-"Details ... Size:" text - that pattern was mistakenly reverse-engineered
-from Amazon's *order* details page, not the *returns* status page (the
-two got mixed up mid-research). The actual returns page has no
-"Details"/"Size:" section; it shows the item name near "Quantity: N" and
-again near the QR/"Return code" section instead. Reverted to a generic
-fallback until that's confirmed against real HTML rather than guessed
-again from a copy-pasted text dump, which had concatenation artifacts
-(two adjacent text nodes read back-to-back with no separator) that make
-the exact structure ambiguous without seeing the source.
+CORRECTED (history, so this mistake doesn't get repeated): an earlier
+version parsed item_description from "Details ... Size:" text on what
+turned out to be the wrong page (order details, not returns status), and
+a later version added "refund issued" as a terminal phrase, which turned
+out to be a timeline label present regardless of actual state (see above).
+Both were guessed from copy-pasted visible text rather than real HTML/DOM
+structure - the card-scoped selectors above came from actual view-source
+snippets instead and have held up across multiple different cards.
 
 BEST EFFORT / UNVERIFIED (revisit once more real examples are seen):
 - "Drop off by [date]" as the pre-shipment status text is still a guess,
   not yet observed directly.
-- item_description has no confirmed pattern right now - see CORRECTED
-  note above. Falls back to a generic "Return" label.
-- "return received" as a terminal phrase is still a guess by analogy, not
-  observed.
+- Cards with no item-name link (unlikely, but not proven impossible) fall
+  back to a generic "Return" label.
 """
 
 import asyncio
@@ -77,7 +80,9 @@ logger = logging.getLogger(__name__)
 
 RETURNS_LIST_URL = "https://www.amazon.com/your-returns"
 
+_RETURN_CARD_CLASS = "item-return-history-card"
 _RETURN_STATUS_LINK_ATTRS = {"data-event-type": "returnHistoryItemCard:viewReturnStatus"}
+_ITEM_LINK_SELECTOR = 'a.a-size-base.a-link-normal[href*="/dp/"]'
 _QR_IMAGE_URL_PATTERN = re.compile(r"https://trans-qrcode-images-na\.s3\.amazonaws\.com/[^\"'\s]+")
 
 # "Drop off by ..." is still an unverified guess; "Return by ..." and
@@ -88,14 +93,11 @@ _ACTIVE_STATUS_PATTERNS = [
     re.compile(r"return in transit", re.IGNORECASE),
 ]
 
-# Confirmed: "we have issued your refund", "your refund was issued", and
-# "refund issued" (2026-09-21). "return received" is still guessed by
-# analogy - see module docstring.
+# Deliberately just these two full declarative sentences - see module
+# docstring for why the shorter "refund issued" was tried and reverted.
 _TERMINAL_STATUS_PHRASES = [
     "we have issued your refund",
     "your refund was issued",
-    "refund issued",
-    "return received",
 ]
 
 
@@ -129,28 +131,34 @@ def _guess_status_label(page_text: str) -> str:
     return "In progress"
 
 
-def _guess_item_description(page_text: str) -> str:
-    # No confirmed pattern for the returns page yet - see module docstring's
-    # CORRECTED note. Deliberately not guessing again from prose; needs real
-    # HTML around "Quantity:" / the QR section to get right.
+def _extract_item_description(card) -> str:
+    link = card.select_one(_ITEM_LINK_SELECTOR)
+    if link and link.text.strip():
+        return link.text.strip()
     return "Return"
 
 
 def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
     """List returns that are currently in progress (not yet completed).
 
-    Fetches the returns list page for the set of return links, then visits
-    each return's detail page (one request per return) to determine
-    whether it's terminal, since the list page alone doesn't say.
+    Fetches the returns list page for its per-return cards (item name
+    comes from here), then visits each return's detail page (one request
+    per return) to determine whether it's terminal, since the list page
+    alone doesn't say.
     """
     list_response = session.get(RETURNS_LIST_URL)
     session.check_response(list_response)
 
-    link_tags = list_response.parsed.find_all("a", attrs=_RETURN_STATUS_LINK_ATTRS)
-    logger.info("get_returns_in_progress: found %d return-status link(s) on %s", len(link_tags), RETURNS_LIST_URL)
+    cards = list_response.parsed.find_all("div", class_=_RETURN_CARD_CLASS)
+    logger.info("get_returns_in_progress: found %d return card(s) on %s", len(cards), RETURNS_LIST_URL)
 
     returns = []
-    for link_tag in link_tags:
+    for card in cards:
+        link_tag = card.find("a", attrs=_RETURN_STATUS_LINK_ATTRS)
+        if not link_tag:
+            logger.info("Return card had no 'View return status' link, skipping.")
+            continue
+
         href = link_tag.get("href")
         if not href:
             logger.warning("Return-status link had no href, skipping: %s", link_tag)
@@ -163,6 +171,8 @@ def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
         if not rma_id or not order_number:
             logger.warning("Return-status link missing rmaId/orderId, skipping: %s", details_link)
             continue
+
+        item_description = _extract_item_description(card)
 
         try:
             detail_response = session.get(details_link)
@@ -183,7 +193,7 @@ def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
             ReturnSummary(
                 return_id=rma_id,
                 order_number=order_number,
-                item_description=_guess_item_description(page_text),
+                item_description=item_description,
                 return_status=status_label,
                 return_details_link=details_link,
             )

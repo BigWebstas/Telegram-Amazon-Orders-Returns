@@ -50,6 +50,17 @@ class Storage:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS seen_returns (
+                    return_id TEXT PRIMARY KEY,
+                    order_number TEXT,
+                    return_status TEXT,
+                    qr_sent INTEGER NOT NULL DEFAULT 0,
+                    last_seen_at TEXT NOT NULL
+                )
+                """
+            )
 
     def get_order_status(self, order_number: str) -> str | None:
         with self._connect() as conn:
@@ -110,6 +121,43 @@ class Storage:
             conn.execute(
                 "INSERT OR IGNORE INTO seen_transactions (transaction_key, seen_at) VALUES (?, ?)",
                 (transaction_key, seen_at),
+            )
+
+    def is_new_return(self, return_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM seen_returns WHERE return_id = ?",
+                (return_id,),
+            ).fetchone()
+            return row is None
+
+    def upsert_return(self, return_id: str, order_number: str, return_status: str | None, seen_at: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO seen_returns (return_id, order_number, return_status, last_seen_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(return_id) DO UPDATE SET
+                    order_number = excluded.order_number,
+                    return_status = excluded.return_status,
+                    last_seen_at = excluded.last_seen_at
+                """,
+                (return_id, order_number, return_status, seen_at),
+            )
+
+    def return_qr_already_sent(self, return_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT qr_sent FROM seen_returns WHERE return_id = ?",
+                (return_id,),
+            ).fetchone()
+            return bool(row and row[0])
+
+    def mark_qr_sent(self, return_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE seen_returns SET qr_sent = 1 WHERE return_id = ?",
+                (return_id,),
             )
 
     def get_last_poll_at(self) -> str | None:

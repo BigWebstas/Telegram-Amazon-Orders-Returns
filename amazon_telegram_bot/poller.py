@@ -4,6 +4,7 @@ import logging
 
 from telegram.ext import Application
 
+from amazon_telegram_bot import returns_qr
 from amazon_telegram_bot.amazon_client import AmazonClient, SessionNotReady
 from amazon_telegram_bot.config import Config
 from amazon_telegram_bot.storage import Storage
@@ -89,6 +90,38 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
             if not is_bootstrap:
                 await app.bot.send_message(chat_id=chat_id, text=_format_transaction_message(transaction))
             storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
+
+    # Stays a no-op (empty list) until returns_qr.get_returns_in_progress is
+    # implemented - see that module's docstring for the research checklist.
+    try:
+        returns = await asyncio.to_thread(returns_qr.get_returns_in_progress, amazon.session)
+    except NotImplementedError:
+        returns = []
+
+    for ret in returns:
+        is_new_return = storage.is_new_return(ret.return_id)
+        if is_new_return and not is_bootstrap:
+            await app.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"\U0001F504 Return started\n"
+                    f"Order {ret.order_number} - {ret.item_description}\n"
+                    f"{ret.return_status}"
+                ),
+            )
+        storage.upsert_return(ret.return_id, ret.order_number, ret.return_status, datetime.datetime.utcnow().isoformat())
+
+        async def _send_photo(photo_bytes: bytes, _ret=ret) -> None:
+            await app.bot.send_photo(
+                chat_id=chat_id,
+                photo=photo_bytes,
+                caption=f"Return QR for order {_ret.order_number}",
+            )
+
+        # Deliberately not gated on is_bootstrap: the QR is something you
+        # actually need to complete the return, so a pre-existing one from
+        # before the bot started shouldn't be swallowed silently.
+        await returns_qr.send_return_qr_if_ready(amazon.session, storage, ret.return_id, _send_photo)
 
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())
 

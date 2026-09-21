@@ -5,6 +5,7 @@ import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+from amazon_telegram_bot import returns_qr
 from amazon_telegram_bot.amazon_client import AmazonClient, SessionNotReady
 from amazon_telegram_bot.config import Config
 from amazon_telegram_bot.storage import Storage
@@ -81,10 +82,31 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
     async def returns_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
             return
-        await update.message.reply_text(
-            "Returns tracking and QR codes aren't implemented yet. "
-            "See amazon_telegram_bot/returns_qr.py for the plan."
-        )
+        try:
+            await asyncio.to_thread(amazon.ensure_logged_in)
+            returns = await asyncio.to_thread(returns_qr.get_returns_in_progress, amazon.session)
+        except SessionNotReady as exc:
+            await update.message.reply_text(str(exc))
+            return
+        except NotImplementedError:
+            await update.message.reply_text(
+                "Returns tracking and QR codes aren't implemented yet. "
+                "See amazon_telegram_bot/returns_qr.py for the plan."
+            )
+            return
+
+        if not returns:
+            await update.message.reply_text("No returns in progress.")
+            return
+
+        lines = [f"{r.order_number} - {r.item_description} - {r.return_status}" for r in returns]
+        await update.message.reply_text("\n".join(lines))
+
+        for ret in returns:
+            async def _send_photo(photo_bytes: bytes, _ret=ret) -> None:
+                await update.message.reply_photo(photo=photo_bytes, caption=f"Return QR for order {_ret.order_number}")
+
+            await returns_qr.send_return_qr_if_ready(amazon.session, storage, ret.return_id, _send_photo)
 
     async def delivered_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):

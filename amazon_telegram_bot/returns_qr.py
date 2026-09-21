@@ -33,9 +33,11 @@ CONFIRMED:
   in-progress return likely only has "Initiated", or "Initiated" +
   "Dropped off", with dates), but that's not yet confirmed against an
   actual in-progress example, so it isn't used for status text yet.
-- "Return in transit" confirmed as an active (non-terminal) status phrase
-  on at least one return, alongside the still-unverified "Drop off by
-  [date]" guess.
+- "Return in transit" and "Return by [date]" (the latter seen on the
+  /your-returns list page itself, per-return, alongside "Drop off at any
+  UPS dropoff"/"Drop off at any UPS Store") confirmed as active
+  (non-terminal) status phrases. "Drop off by [date]" specifically is
+  still an unverified guess by analogy.
 
 CORRECTED: an earlier version of this file parsed item_description from
 "Details ... Size:" text - that pattern was mistakenly reverse-engineered
@@ -78,9 +80,10 @@ RETURNS_LIST_URL = "https://www.amazon.com/your-returns"
 _RETURN_STATUS_LINK_ATTRS = {"data-event-type": "returnHistoryItemCard:viewReturnStatus"}
 _QR_IMAGE_URL_PATTERN = re.compile(r"https://trans-qrcode-images-na\.s3\.amazonaws\.com/[^\"'\s]+")
 
-# "Drop off by ..." is still an unverified guess; "Return in transit" is
-# confirmed - see module docstring.
+# "Drop off by ..." is still an unverified guess; "Return by ..." and
+# "Return in transit" are confirmed - see module docstring.
 _ACTIVE_STATUS_PATTERNS = [
+    re.compile(r"return by [a-z]{3,9}\.?\s*\d{1,2}", re.IGNORECASE),
     re.compile(r"drop off by[^.\n]{0,40}", re.IGNORECASE),
     re.compile(r"return in transit", re.IGNORECASE),
 ]

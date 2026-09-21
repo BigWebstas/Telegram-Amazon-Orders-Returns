@@ -27,7 +27,13 @@ CONFIRMED:
   a presigned S3 URL like
   https://trans-qrcode-images-na.s3.amazonaws.com/<carrier-tracking-number>.gif
   Being presigned, it needs no Amazon auth to fetch - only the page that
-  contains the <img src> needs an authenticated request.
+  contains the <img src> needs an authenticated request. Confirmed against
+  a FedEx drop-off only, though - three real UPS drop-off returns (Drop
+  off at any UPS dropoff/Store) all came back with no QR found, so this
+  URL pattern may be FedEx-specific, or UPS ones may render differently.
+  Not yet confirmed which - get_return_qr_code() now logs any
+  similar-looking URL it finds when the primary pattern misses, so the
+  next miss should reveal the real one without another manual HTML paste.
 - Terminal (completed) detection: only the declarative heading sentences
   "we have issued your refund" and "your refund was issued" are used.
   "Refund issued" alone was tried and reverted - a completed return's
@@ -84,6 +90,10 @@ _RETURN_CARD_CLASS = "item-return-history-card"
 _RETURN_STATUS_LINK_ATTRS = {"data-event-type": "returnHistoryItemCard:viewReturnStatus"}
 _ITEM_LINK_SELECTOR = 'a.a-size-base.a-link-normal[href*="/dp/"]'
 _QR_IMAGE_URL_PATTERN = re.compile(r"https://trans-qrcode-images-na\.s3\.amazonaws\.com/[^\"'\s]+")
+# Only confirmed against a FedEx drop-off so far. Used purely for logging
+# when the primary pattern misses, so the next carrier's real URL shows up
+# in bot.log instead of needing another manual HTML paste to diagnose.
+_QR_HINT_PATTERN = re.compile(r"https://[^\"'\s]*(?:qrcode|barcode|s3\.amazonaws\.com)[^\"'\s]*", re.IGNORECASE)
 
 # "Drop off by ..." is still an unverified guess; "Return by ..." and
 # "Return in transit" are confirmed - see module docstring.
@@ -222,6 +232,21 @@ def get_return_qr_code(session: AmazonSession, return_details_link: str) -> byte
 
     match = _QR_IMAGE_URL_PATTERN.search(response.response.text)
     if not match:
+        hint = _QR_HINT_PATTERN.search(response.response.text)
+        if hint:
+            logger.warning(
+                "No QR match via the confirmed FedEx pattern on %s, but found a "
+                "similar-looking URL that might be this carrier's actual QR image: "
+                "%s - the pattern likely needs to cover this too.",
+                return_details_link, hint.group(0),
+            )
+        else:
+            logger.info(
+                "No QR or QR-like URL found at all on %s (page may genuinely have "
+                "none - e.g. not a drop-off return, or JS-rendered rather than "
+                "static HTML).",
+                return_details_link,
+            )
         raise ReturnHasNoQRCode(
             f"No QR code found on {return_details_link} - likely a mail-back "
             "return, or already past the point where a QR is shown."

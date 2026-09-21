@@ -30,7 +30,7 @@ bot will send you a Telegram message telling you to re-run step 3.
 
 ## Commands
 
-- `/orders` — active orders from the last 30 days (not delivered, not cancelled).
+- `/orders` — orders from the last 30 days currently in "Arriving" status.
 - `/orders <year>` — all orders for that year, unfiltered.
 - `/transactions` — recent account transactions.
 - `/status` — actively checks the Amazon login (not just a cached flag),

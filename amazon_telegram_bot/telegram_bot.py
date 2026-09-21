@@ -16,10 +16,8 @@ def _authorized(config: Config, update: Update) -> bool:
 def _is_active(order) -> bool:
     if order.cancelled:
         return False
-    if not order.shipments:
-        return True
-    return not all(
-        (shipment.delivery_status or "").strip().lower().startswith("delivered")
+    return any(
+        (shipment.delivery_status or "").strip().lower().startswith("arriving")
         for shipment in order.shipments
     )
 

@@ -28,9 +28,14 @@ def _order_status(order) -> str:
     return "; ".join(sorted(statuses)) if statuses else "Processing"
 
 
-def _format_order_listing_message(order_number: str, total: float | None, status: str) -> str:
+def _item_description(order) -> str:
+    titles = [item.title for item in order.items if item.title]
+    return "; ".join(titles) if titles else "Unknown item"
+
+
+def _format_order_listing_message(order_number: str, item_description: str, total: float | None, status: str) -> str:
     total_str = f"${total:.2f}" if total is not None else "unknown total"
-    return f"\U0001F4E6 Order {order_number}\n{total_str}\n{status}"
+    return f"\U0001F4E6 Order {order_number} - {item_description}\n{total_str}\n{status}"
 
 
 def build_application(config: Config, amazon: AmazonClient, storage: Storage) -> Application:
@@ -54,7 +59,7 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
                 return
             for o in orders[:20]:
                 await update.message.reply_text(
-                    _format_order_listing_message(o.order_number, o.grand_total, _order_status(o))
+                    _format_order_listing_message(o.order_number, _item_description(o), o.grand_total, _order_status(o))
                 )
             return
 
@@ -68,18 +73,29 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
                 await update.message.reply_text(str(exc))
                 return
             rows = [
-                (o.order_number, o.shipments[0].delivery_status if o.shipments else None, o.grand_total, o.cancelled)
+                (
+                    o.order_number,
+                    o.shipments[0].delivery_status if o.shipments else None,
+                    o.grand_total,
+                    o.cancelled,
+                    _item_description(o),
+                )
                 for o in orders
             ]
 
-        active = [(number, status, total) for number, status, total, cancelled in rows
-                  if _is_active_status(status, cancelled)]
+        active = [
+            (number, status, total, item_description)
+            for number, status, total, cancelled, item_description in rows
+            if _is_active_status(status, cancelled)
+        ]
         if not active:
             await update.message.reply_text("No active orders.")
             return
 
-        for number, status, total in active[:20]:
-            await update.message.reply_text(_format_order_listing_message(number, total, status))
+        for number, status, total, item_description in active[:20]:
+            await update.message.reply_text(
+                _format_order_listing_message(number, item_description or "Unknown item", total, status)
+            )
 
     async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):

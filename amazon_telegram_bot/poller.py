@@ -20,22 +20,27 @@ def _total_str(order) -> str:
     return f"${order.grand_total:.2f}" if order.grand_total is not None else "unknown total"
 
 
+def _item_description(order) -> str:
+    titles = [item.title for item in order.items if item.title]
+    return "; ".join(titles) if titles else "Unknown item"
+
+
 def _format_new_order_message(order) -> str:
     return (
         f"\U0001F195 New order placed\n"
-        f"Order {order.order_number}\n"
+        f"Order {order.order_number} - {_item_description(order)}\n"
         f"{_total_str(order)} - placed {order.order_placed_date}"
     )
 
 
 def _format_delivered_message(order) -> str:
-    return f"✅ Delivered!\nOrder {order.order_number}\n{_total_str(order)}"
+    return f"✅ Delivered!\nOrder {order.order_number} - {_item_description(order)}\n{_total_str(order)}"
 
 
 def _format_status_change_message(order, previous_status: str | None, status: str | None) -> str:
     return (
         f"\U0001F4E6 Status update\n"
-        f"Order {order.order_number}\n"
+        f"Order {order.order_number} - {_item_description(order)}\n"
         f"{_total_str(order)}\n"
         f"{previous_status or 'Unknown'} → {status or 'Unknown'}"
     )
@@ -81,7 +86,9 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         # true delivery date, so it's left out of /delivered rather than guessed.
         if became_delivered:
             storage.mark_delivered(order.order_number, now)
-        storage.upsert_order(order.order_number, status, now, order.grand_total, order.cancelled)
+        storage.upsert_order(
+            order.order_number, status, now, order.grand_total, order.cancelled, _item_description(order)
+        )
 
     transactions = await asyncio.to_thread(amazon.fetch_transactions)
     for transaction in transactions:

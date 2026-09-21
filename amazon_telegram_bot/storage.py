@@ -36,6 +36,8 @@ class Storage:
                 conn.execute("ALTER TABLE seen_orders ADD COLUMN grand_total REAL")
             if "cancelled" not in existing_columns:
                 conn.execute("ALTER TABLE seen_orders ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0")
+            if "item_description" not in existing_columns:
+                conn.execute("ALTER TABLE seen_orders ADD COLUMN item_description TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS seen_transactions (
@@ -79,22 +81,25 @@ class Storage:
         seen_at: str,
         grand_total: float | None = None,
         cancelled: bool = False,
+        item_description: str | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO seen_orders (order_number, delivery_status, last_seen_at, grand_total, cancelled)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO seen_orders
+                    (order_number, delivery_status, last_seen_at, grand_total, cancelled, item_description)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(order_number) DO UPDATE SET
                     delivery_status = excluded.delivery_status,
                     last_seen_at = excluded.last_seen_at,
                     grand_total = excluded.grand_total,
-                    cancelled = excluded.cancelled
+                    cancelled = excluded.cancelled,
+                    item_description = excluded.item_description
                 """,
-                (order_number, delivery_status, seen_at, grand_total, int(cancelled)),
+                (order_number, delivery_status, seen_at, grand_total, int(cancelled), item_description),
             )
 
-    def get_cached_orders(self) -> list[tuple[str, str | None, float | None, bool]]:
+    def get_cached_orders(self) -> list[tuple[str, str | None, float | None, bool, str | None]]:
         """All orders the poller has seen, for serving /orders without hitting Amazon.
 
         Only reflects the poller's last30-day polling window - a fresh
@@ -103,9 +108,12 @@ class Storage:
         """
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT order_number, delivery_status, grand_total, cancelled FROM seen_orders"
+                "SELECT order_number, delivery_status, grand_total, cancelled, item_description FROM seen_orders"
             ).fetchall()
-            return [(number, status, total, bool(cancelled)) for number, status, total, cancelled in rows]
+            return [
+                (number, status, total, bool(cancelled), item_description)
+                for number, status, total, cancelled, item_description in rows
+            ]
 
     def mark_delivered(self, order_number: str, delivered_at: str) -> None:
         with self._connect() as conn:

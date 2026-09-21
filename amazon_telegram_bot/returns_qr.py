@@ -143,10 +143,14 @@ def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
     list_response = session.get(RETURNS_LIST_URL)
     session.check_response(list_response)
 
+    link_tags = list_response.parsed.find_all("a", attrs=_RETURN_STATUS_LINK_ATTRS)
+    logger.info("get_returns_in_progress: found %d return-status link(s) on %s", len(link_tags), RETURNS_LIST_URL)
+
     returns = []
-    for link_tag in list_response.parsed.find_all("a", attrs=_RETURN_STATUS_LINK_ATTRS):
+    for link_tag in link_tags:
         href = link_tag.get("href")
         if not href:
+            logger.warning("Return-status link had no href, skipping: %s", link_tag)
             continue
 
         details_link = urljoin(RETURNS_LIST_URL, href)
@@ -154,29 +158,35 @@ def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
         rma_id = params.get("rmaId", [None])[0]
         order_number = params.get("orderId", [None])[0]
         if not rma_id or not order_number:
+            logger.warning("Return-status link missing rmaId/orderId, skipping: %s", details_link)
             continue
 
         try:
             detail_response = session.get(details_link)
             session.check_response(detail_response)
         except AmazonOrdersError:
-            logger.warning("Could not load return detail page for rmaId=%s, skipping.", rma_id)
+            logger.warning("Could not load return detail page for rmaId=%s, skipping.", rma_id, exc_info=True)
             continue
 
         page_text = detail_response.parsed.get_text(" ", strip=True)
         if _is_terminal_status(page_text):
+            logger.info("rmaId=%s classified terminal, excluding from results.", rma_id)
             continue
+
+        status_label = _guess_status_label(page_text)
+        logger.info("rmaId=%s order=%s classified in-progress, status_label=%r", rma_id, order_number, status_label)
 
         returns.append(
             ReturnSummary(
                 return_id=rma_id,
                 order_number=order_number,
                 item_description=_guess_item_description(page_text),
-                return_status=_guess_status_label(page_text),
+                return_status=status_label,
                 return_details_link=details_link,
             )
         )
 
+    logger.info("get_returns_in_progress: returning %d in-progress return(s)", len(returns))
     return returns
 
 

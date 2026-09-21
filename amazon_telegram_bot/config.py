@@ -23,6 +23,10 @@ class Config:
     def db_path(self) -> str:
         return os.path.join(self.data_dir, "bot.db")
 
+    @property
+    def log_path(self) -> str:
+        return os.path.join(self.data_dir, "bot.log")
+
 
 def _require(name: str) -> str:
     value = os.environ.get(name)

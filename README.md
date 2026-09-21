@@ -33,7 +33,8 @@ bot will send you a Telegram message telling you to re-run step 3.
 - `/orders` — active orders from the last 30 days (not delivered, not cancelled).
 - `/orders <year>` — all orders for that year, unfiltered.
 - `/transactions` — recent account transactions.
-- `/status` — session health and last successful poll time.
+- `/status` — actively checks the Amazon login (not just a cached flag),
+  reports last successful poll time, and sends `bot.log` as a file.
 - `/returns` — currently replies that returns tracking isn't implemented.
 
 The bot also polls in the background (every `POLL_INTERVAL_MINUTES`,

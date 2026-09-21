@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -89,12 +90,27 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
     async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
             return
+
+        await update.message.reply_text("Checking Amazon login...")
+        try:
+            # No-ops if already authenticated, so this only pays the login-flow
+            # cost when the cached session actually needs it.
+            await asyncio.to_thread(amazon.ensure_logged_in)
+            session_state = "authenticated"
+        except SessionNotReady as exc:
+            session_state = f"NOT authenticated - {exc}"
+
         last_poll_at = storage.get_last_poll_at()
-        session_state = "authenticated" if amazon.session.is_authenticated else "not authenticated"
         await update.message.reply_text(
             f"Amazon session: {session_state}\n"
             f"Last successful poll: {last_poll_at or 'never'}"
         )
+
+        if os.path.exists(config.log_path) and os.path.getsize(config.log_path) > 0:
+            with open(config.log_path, "rb") as log_file:
+                await update.message.reply_document(document=log_file, filename="bot.log")
+        else:
+            await update.message.reply_text("No logs written yet.")
 
     app.add_handler(CommandHandler("orders", orders_command))
     app.add_handler(CommandHandler("transactions", transactions_command))

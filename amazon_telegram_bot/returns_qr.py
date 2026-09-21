@@ -21,28 +21,38 @@ CONFIRMED:
   https://trans-qrcode-images-na.s3.amazonaws.com/<carrier-tracking-number>.gif
   Being presigned, it needs no Amazon auth to fetch - only the page that
   contains the <img src> needs an authenticated request.
-- Two confirmed terminal (completed) phrasings: "we have issued your
-  refund" and, separately, "refund issued" (e.g. "$27.55 refund issued on
-  Sep 20, 2026" - third person, with amount/date, seen on a return whose
-  page *also* still said "Return in transit"). The QR image, and even an
-  "in transit" tracking line, can both still be present after completion,
-  so a terminal-phrase match always wins over any other status text found
-  on the same page - checked first, unconditionally.
-- item_description: the page's visible text runs "Returns center / Details
-  / <item name> / Size: ... / Color: ... / $price / <status>" in that
-  order (title tags/headings are generic, e.g. "Returns center" - not the
-  item). _guess_item_description() pulls the text between "Details" and
-  "Size:", confirmed against one real example ("Lepunuo Womens Casual
-  Jumpsuits Summer...").
-- "Return in transit" confirmed as an active (non-terminal) status phrase,
-  alongside the still-unverified "Drop off by [date]" guess.
+- Confirmed terminal (completed) phrasings: "we have issued your refund",
+  "your refund was issued", and "refund issued" (e.g. "$27.55 refund
+  issued on Sep 20, 2026"). The QR image, and even an "in transit"
+  tracking line, can both still be present after completion, so a
+  terminal-phrase match always wins over any other status text found on
+  the same page - checked first, unconditionally.
+- A completed return's page also shows a dated timeline: "Initiated" ->
+  "Dropped off" -> "Refund issued" -> "Refund credited". These are
+  probably the canonical step names used throughout a return's life (an
+  in-progress return likely only has "Initiated", or "Initiated" +
+  "Dropped off", with dates), but that's not yet confirmed against an
+  actual in-progress example, so it isn't used for status text yet.
+- "Return in transit" confirmed as an active (non-terminal) status phrase
+  on at least one return, alongside the still-unverified "Drop off by
+  [date]" guess.
+
+CORRECTED: an earlier version of this file parsed item_description from
+"Details ... Size:" text - that pattern was mistakenly reverse-engineered
+from Amazon's *order* details page, not the *returns* status page (the
+two got mixed up mid-research). The actual returns page has no
+"Details"/"Size:" section; it shows the item name near "Quantity: N" and
+again near the QR/"Return code" section instead. Reverted to a generic
+fallback until that's confirmed against real HTML rather than guessed
+again from a copy-pasted text dump, which had concatenation artifacts
+(two adjacent text nodes read back-to-back with no separator) that make
+the exact structure ambiguous without seeing the source.
 
 BEST EFFORT / UNVERIFIED (revisit once more real examples are seen):
 - "Drop off by [date]" as the pre-shipment status text is still a guess,
   not yet observed directly.
-- The "Details ... Size:" item_description pattern is confirmed for one
-  item; items without a Size line (electronics, etc.) will fall through
-  to the generic "Return" fallback instead.
+- item_description has no confirmed pattern right now - see CORRECTED
+  note above. Falls back to a generic "Return" label.
 - "return received" as a terminal phrase is still a guess by analogy, not
   observed.
 """
@@ -67,7 +77,6 @@ RETURNS_LIST_URL = "https://www.amazon.com/your-returns"
 
 _RETURN_STATUS_LINK_ATTRS = {"data-event-type": "returnHistoryItemCard:viewReturnStatus"}
 _QR_IMAGE_URL_PATTERN = re.compile(r"https://trans-qrcode-images-na\.s3\.amazonaws\.com/[^\"'\s]+")
-_ITEM_DESCRIPTION_PATTERN = re.compile(r"\bDetails\b\s*(.+?)\s*\bSize:", re.IGNORECASE | re.DOTALL)
 
 # "Drop off by ..." is still an unverified guess; "Return in transit" is
 # confirmed - see module docstring.
@@ -76,10 +85,12 @@ _ACTIVE_STATUS_PATTERNS = [
     re.compile(r"return in transit", re.IGNORECASE),
 ]
 
-# Confirmed: "we have issued your refund" and "refund issued" (2026-09-21).
-# "return received" is still guessed by analogy - see module docstring.
+# Confirmed: "we have issued your refund", "your refund was issued", and
+# "refund issued" (2026-09-21). "return received" is still guessed by
+# analogy - see module docstring.
 _TERMINAL_STATUS_PHRASES = [
     "we have issued your refund",
+    "your refund was issued",
     "refund issued",
     "return received",
 ]
@@ -116,8 +127,10 @@ def _guess_status_label(page_text: str) -> str:
 
 
 def _guess_item_description(page_text: str) -> str:
-    match = _ITEM_DESCRIPTION_PATTERN.search(page_text)
-    return match.group(1).strip() if match else "Return"
+    # No confirmed pattern for the returns page yet - see module docstring's
+    # CORRECTED note. Deliberately not guessing again from prose; needs real
+    # HTML around "Quantity:" / the QR section to get right.
+    return "Return"
 
 
 def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:

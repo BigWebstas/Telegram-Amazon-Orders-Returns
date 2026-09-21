@@ -71,18 +71,19 @@ Implemented, based on two real walkthroughs (2026-09-21) since
   order can have more than one return
 - Fetching the QR image, which turned out to be a plain presigned S3 URL,
   no browser/Playwright needed for this part
-- Detecting a completed return via its status text - two confirmed
-  phrasings ("we have issued your refund" and "refund issued"), checked
-  first and always wins even if the page also still shows "Return in
-  transit" or a QR image, both of which can outlive completion
-- Item description, parsed from the text between "Details" and "Size:" on
-  the detail page - confirmed against a real item
+- Detecting a completed return via its status text - three confirmed
+  phrasings ("we have issued your refund", "your refund was issued",
+  "refund issued"), checked first and always wins even if the page also
+  still shows "Return in transit" or a QR image, both of which can
+  outlive completion
 - "Return in transit" confirmed as an active (non-terminal) status label
 
 Still a guess, not yet observed directly:
 - "Drop off by [date]" as the pre-shipment status text
-- Items with no Size line (electronics etc.) fall back to a generic
-  "Return" label instead of their real name
+- Item description has no confirmed pattern - falls back to a generic
+  "Return" label. An earlier version guessed a pattern from the wrong
+  page (order details, not the returns page) and got it wrong; reverted
+  rather than guess again without real HTML to check against.
 
 See `amazon_telegram_bot/returns_qr.py`'s docstring for the full breakdown.
 If `/returns` or a return notification looks off, it's likely one of

@@ -21,19 +21,29 @@ CONFIRMED:
   https://trans-qrcode-images-na.s3.amazonaws.com/<carrier-tracking-number>.gif
   Being presigned, it needs no Amazon auth to fetch - only the page that
   contains the <img src> needs an authenticated request.
-- One confirmed terminal (completed) status string, verbatim: "We have
-  issued your refund". The QR image is still present on the page even
-  after the return is completed, so status text - not QR presence - is
-  what has to gate "still needs action."
+- Two confirmed terminal (completed) phrasings: "we have issued your
+  refund" and, separately, "refund issued" (e.g. "$27.55 refund issued on
+  Sep 20, 2026" - third person, with amount/date, seen on a return whose
+  page *also* still said "Return in transit"). The QR image, and even an
+  "in transit" tracking line, can both still be present after completion,
+  so a terminal-phrase match always wins over any other status text found
+  on the same page - checked first, unconditionally.
+- item_description: the page's visible text runs "Returns center / Details
+  / <item name> / Size: ... / Color: ... / $price / <status>" in that
+  order (title tags/headings are generic, e.g. "Returns center" - not the
+  item). _guess_item_description() pulls the text between "Details" and
+  "Size:", confirmed against one real example ("Lepunuo Womens Casual
+  Jumpsuits Summer...").
+- "Return in transit" confirmed as an active (non-terminal) status phrase,
+  alongside the still-unverified "Drop off by [date]" guess.
 
 BEST EFFORT / UNVERIFIED (revisit once more real examples are seen):
-- The exact text for an in-progress status (e.g. "Drop off by [date]")
-  hasn't been confirmed - _guess_status_label() pattern-matches "drop off
-  by" and falls back to a generic "In progress" label.
-- item_description has no confirmed selector - _guess_item_description()
-  falls back to the page <title>, which may not actually contain it.
-- Only one terminal phrase is in _TERMINAL_STATUS_PHRASES. Others (e.g.
-  "return received", "refund processed") are guessed by analogy, not
+- "Drop off by [date]" as the pre-shipment status text is still a guess,
+  not yet observed directly.
+- The "Details ... Size:" item_description pattern is confirmed for one
+  item; items without a Size line (electronics, etc.) will fall through
+  to the generic "Return" fallback instead.
+- "return received" as a terminal phrase is still a guess by analogy, not
   observed.
 """
 
@@ -57,14 +67,21 @@ RETURNS_LIST_URL = "https://www.amazon.com/your-returns"
 
 _RETURN_STATUS_LINK_ATTRS = {"data-event-type": "returnHistoryItemCard:viewReturnStatus"}
 _QR_IMAGE_URL_PATTERN = re.compile(r"https://trans-qrcode-images-na\.s3\.amazonaws\.com/[^\"'\s]+")
-_DROP_OFF_PATTERN = re.compile(r"drop off by[^.\n]{0,40}", re.IGNORECASE)
+_ITEM_DESCRIPTION_PATTERN = re.compile(r"\bDetails\b\s*(.+?)\s*\bSize:", re.IGNORECASE | re.DOTALL)
 
-# Confirmed: "we have issued your refund" (2026-09-21). The rest are
-# guessed by analogy and unverified - see module docstring.
+# "Drop off by ..." is still an unverified guess; "Return in transit" is
+# confirmed - see module docstring.
+_ACTIVE_STATUS_PATTERNS = [
+    re.compile(r"drop off by[^.\n]{0,40}", re.IGNORECASE),
+    re.compile(r"return in transit", re.IGNORECASE),
+]
+
+# Confirmed: "we have issued your refund" and "refund issued" (2026-09-21).
+# "return received" is still guessed by analogy - see module docstring.
 _TERMINAL_STATUS_PHRASES = [
     "we have issued your refund",
+    "refund issued",
     "return received",
-    "refund processed",
 ]
 
 
@@ -91,15 +108,16 @@ def _is_terminal_status(page_text: str) -> bool:
 
 
 def _guess_status_label(page_text: str) -> str:
-    match = _DROP_OFF_PATTERN.search(page_text)
-    return match.group(0).strip() if match else "In progress"
+    for pattern in _ACTIVE_STATUS_PATTERNS:
+        match = pattern.search(page_text)
+        if match:
+            return match.group(0).strip()
+    return "In progress"
 
 
-def _guess_item_description(parsed) -> str:
-    title_tag = parsed.find("title")
-    if title_tag and title_tag.text.strip():
-        return title_tag.text.strip()
-    return "Return"
+def _guess_item_description(page_text: str) -> str:
+    match = _ITEM_DESCRIPTION_PATTERN.search(page_text)
+    return match.group(1).strip() if match else "Return"
 
 
 def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
@@ -140,7 +158,7 @@ def get_returns_in_progress(session: AmazonSession) -> list[ReturnSummary]:
             ReturnSummary(
                 return_id=rma_id,
                 order_number=order_number,
-                item_description=_guess_item_description(detail_response.parsed),
+                item_description=_guess_item_description(page_text),
                 return_status=_guess_status_label(page_text),
                 return_details_link=details_link,
             )

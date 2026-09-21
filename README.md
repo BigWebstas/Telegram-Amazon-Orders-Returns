@@ -63,26 +63,30 @@ from that point on get pushed.
 
 ## Returns QR status
 
-Implemented, based on a real walkthrough (2026-09-21) since `amazon-orders`
-doesn't cover returns at all. Confirmed and working:
+Implemented, based on two real walkthroughs (2026-09-21) since
+`amazon-orders` doesn't cover returns at all. Confirmed and working:
 
 - Listing in-progress returns from `https://www.amazon.com/your-returns`
 - Distinguishing a return's own ID (`rmaId`) from its order number - one
   order can have more than one return
 - Fetching the QR image, which turned out to be a plain presigned S3 URL,
   no browser/Playwright needed for this part
-- Detecting a completed return via its status text ("We have issued your
-  refund"), since the QR image stays on the page even after completion
+- Detecting a completed return via its status text - two confirmed
+  phrasings ("we have issued your refund" and "refund issued"), checked
+  first and always wins even if the page also still shows "Return in
+  transit" or a QR image, both of which can outlive completion
+- Item description, parsed from the text between "Details" and "Size:" on
+  the detail page - confirmed against a real item
+- "Return in transit" confirmed as an active (non-terminal) status label
 
-Best-effort / not yet confirmed against a real example:
-- The exact text for an in-progress status (e.g. "Drop off by [date]")
-- Where the item's description actually lives on the page (falls back to
-  the page `<title>`)
+Still a guess, not yet observed directly:
+- "Drop off by [date]" as the pre-shipment status text
+- Items with no Size line (electronics etc.) fall back to a generic
+  "Return" label instead of their real name
 
 See `amazon_telegram_bot/returns_qr.py`'s docstring for the full breakdown.
-If `/returns` or a return notification looks wrong, it's most likely one
-of these two guesses - report back what you actually see and they can be
-tightened up.
+If `/returns` or a return notification looks off, it's likely one of
+these two remaining guesses - report back what you actually see.
 
 ## Unraid (Community Applications)
 

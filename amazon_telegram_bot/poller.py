@@ -104,11 +104,7 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         if is_new_return and not is_bootstrap:
             await app.bot.send_message(
                 chat_id=chat_id,
-                text=(
-                    f"\U0001F504 Return started\n"
-                    f"Order {ret.order_number} - {ret.item_description}\n"
-                    f"{ret.return_status}"
-                ),
+                text=returns_qr.format_return_message(ret, heading="\U0001F504 Return started"),
             )
         storage.upsert_return(ret.return_id, ret.order_number, ret.return_status, datetime.datetime.utcnow().isoformat())
 

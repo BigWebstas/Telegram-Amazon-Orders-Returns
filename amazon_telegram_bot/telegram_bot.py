@@ -117,10 +117,9 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             await update.message.reply_text("No returns in progress.")
             return
 
-        lines = [f"{r.order_number} - {r.item_description} - {r.return_status}" for r in returns]
-        await update.message.reply_text("\n".join(lines))
-
         for ret in returns:
+            await update.message.reply_text(returns_qr.format_return_message(ret))
+
             async def _send_photo(photo_bytes: bytes, _ret=ret) -> None:
                 await update.message.reply_photo(photo=photo_bytes, caption=f"Return QR for order {_ret.order_number}")
 

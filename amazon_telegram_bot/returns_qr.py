@@ -118,6 +118,13 @@ class ReturnSummary:
     return_details_link: str
 
 
+def format_return_message(ret: ReturnSummary, *, heading: str = "\U0001F504 Return in progress") -> str:
+    """Shared by poller.py (proactive push) and telegram_bot.py (/returns)
+    so a return always reads the same way regardless of where it's sent
+    from."""
+    return f"{heading}\nOrder {ret.order_number} - {ret.item_description}\n{ret.return_status}"
+
+
 def _is_terminal_status(page_text: str) -> bool:
     lowered = page_text.lower()
     return any(phrase in lowered for phrase in _TERMINAL_STATUS_PHRASES)

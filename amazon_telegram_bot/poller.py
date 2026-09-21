@@ -21,6 +21,10 @@ def _format_order_message(order) -> str:
     )
 
 
+def _is_delivered_status(status: str | None) -> bool:
+    return bool(status) and status.strip().lower().startswith("delivered")
+
+
 def _format_transaction_message(transaction) -> str:
     kind = "Refund" if transaction.is_refund else "Charge"
     return (
@@ -39,7 +43,14 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         changed = previous_status is not None and previous_status != status
         if is_new or changed:
             await app.bot.send_message(chat_id=chat_id, text=_format_order_message(order))
-        storage.upsert_order(order.order_number, status, datetime.datetime.utcnow().isoformat())
+
+        now = datetime.datetime.utcnow().isoformat()
+        # Only stamp delivered_at on an observed transition, not on first sight -
+        # an order that's already delivered when we first see it has an unknown
+        # true delivery date, so it's left out of /delivered rather than guessed.
+        if changed and _is_delivered_status(status) and not _is_delivered_status(previous_status):
+            storage.mark_delivered(order.order_number, now)
+        storage.upsert_order(order.order_number, status, now, order.grand_total)
 
     transactions = await asyncio.to_thread(amazon.fetch_transactions)
     for transaction in transactions:

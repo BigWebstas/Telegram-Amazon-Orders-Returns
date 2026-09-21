@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os
 
 from telegram import Update
@@ -85,6 +86,26 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             "See amazon_telegram_bot/returns_qr.py for the plan."
         )
 
+    async def delivered_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not _authorized(config, update):
+            return
+        cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=3)).isoformat()
+        rows = storage.get_recent_deliveries(cutoff)
+
+        if not rows:
+            await update.message.reply_text(
+                "No deliveries tracked in the last 3 days. Only deliveries the "
+                "bot observed while running count here - it doesn't back-date "
+                "ones from before it started polling."
+            )
+            return
+
+        lines = []
+        for order_number, delivered_at, grand_total in rows[:20]:
+            total = f"${grand_total:.2f}" if grand_total is not None else "unknown total"
+            lines.append(f"{order_number} - {total} - delivered {delivered_at[:10]}")
+        await update.message.reply_text("\n".join(lines))
+
     async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
             return
@@ -111,6 +132,7 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             await update.message.reply_text("No logs written yet.")
 
     app.add_handler(CommandHandler("orders", orders_command))
+    app.add_handler(CommandHandler("delivered", delivered_command))
     app.add_handler(CommandHandler("transactions", transactions_command))
     app.add_handler(CommandHandler("returns", returns_command))
     app.add_handler(CommandHandler("status", status_command))

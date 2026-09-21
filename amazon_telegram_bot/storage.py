@@ -29,6 +29,11 @@ class Storage:
                 )
                 """
             )
+            existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(seen_orders)")}
+            if "delivered_at" not in existing_columns:
+                conn.execute("ALTER TABLE seen_orders ADD COLUMN delivered_at TEXT")
+            if "grand_total" not in existing_columns:
+                conn.execute("ALTER TABLE seen_orders ADD COLUMN grand_total REAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS seen_transactions (
@@ -54,18 +59,43 @@ class Storage:
             ).fetchone()
             return row[0] if row else None
 
-    def upsert_order(self, order_number: str, delivery_status: str | None, seen_at: str) -> None:
+    def upsert_order(
+        self,
+        order_number: str,
+        delivery_status: str | None,
+        seen_at: str,
+        grand_total: float | None = None,
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO seen_orders (order_number, delivery_status, last_seen_at)
-                VALUES (?, ?, ?)
+                INSERT INTO seen_orders (order_number, delivery_status, last_seen_at, grand_total)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(order_number) DO UPDATE SET
                     delivery_status = excluded.delivery_status,
-                    last_seen_at = excluded.last_seen_at
+                    last_seen_at = excluded.last_seen_at,
+                    grand_total = excluded.grand_total
                 """,
-                (order_number, delivery_status, seen_at),
+                (order_number, delivery_status, seen_at, grand_total),
             )
+
+    def mark_delivered(self, order_number: str, delivered_at: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE seen_orders SET delivered_at = ? WHERE order_number = ?",
+                (delivered_at, order_number),
+            )
+
+    def get_recent_deliveries(self, since_iso: str) -> list[tuple[str, str, float | None]]:
+        with self._connect() as conn:
+            return conn.execute(
+                """
+                SELECT order_number, delivered_at, grand_total FROM seen_orders
+                WHERE delivered_at IS NOT NULL AND delivered_at >= ?
+                ORDER BY delivered_at DESC
+                """,
+                (since_iso,),
+            ).fetchall()
 
     def is_new_transaction(self, transaction_key: str) -> bool:
         with self._connect() as conn:

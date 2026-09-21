@@ -32,6 +32,9 @@ bot will send you a Telegram message telling you to re-run step 3.
 
 - `/orders` — orders from the last 30 days currently in "Arriving" status.
 - `/orders <year>` — all orders for that year, unfiltered.
+- `/delivered` — orders delivered in the last 3 days. Only counts
+  deliveries the bot itself observed while polling (a status transition
+  to "Delivered"), not ones that already happened before it started.
 - `/transactions` — recent account transactions.
 - `/status` — actively checks the Amazon login (not just a cached flag),
   reports last successful poll time, and sends `bot.log` as a file.

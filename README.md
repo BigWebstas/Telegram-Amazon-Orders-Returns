@@ -2,9 +2,10 @@
 
 A personal Telegram bot that polls your own Amazon account for order and
 transaction activity, using the unofficial [`amazon-orders`](https://github.com/alexdlaird/amazon-orders)
-library (Amazon has no official buyer-facing API). Returns tracking and
-QR code delivery are fully wired up but the Amazon-parsing itself isn't
-implemented yet — see [Returns QR status](#returns-qr-status).
+library (Amazon has no official buyer-facing API). Returns tracking and QR
+code delivery are implemented, reverse-engineered from a real walkthrough
+— some parts are confirmed, some are still best-effort guesses, see
+[Returns QR status](#returns-qr-status).
 
 ## Setup
 
@@ -44,9 +45,8 @@ bot will send you a Telegram message telling you to re-run step 3.
 - `/status` — actively checks the Amazon login (not just a cached flag),
   reports last successful poll time, and sends `bot.log` as a file.
 - `/returns` — lists in-progress returns and sends any available QR code.
-  Currently replies that returns tracking isn't implemented (see
-  [Returns QR status](#returns-qr-status)) until `returns_qr.py`'s parsing
-  is filled in.
+  See [Returns QR status](#returns-qr-status) for what's confirmed vs.
+  still a best-effort guess.
 
 The bot also polls in the background (every `POLL_INTERVAL_MINUTES`,
 default 30) and pushes a message the moment it sees:
@@ -55,8 +55,7 @@ default 30) and pushes a message the moment it sees:
 - ✅ an order becoming delivered
 - 📦 any other shipment status change
 - 💳 a new transaction
-- 🔄 a return starting, and the QR code the moment one's available (once
-  returns tracking is implemented)
+- 🔄 a return starting, and the QR code the moment one's available
 
 On the very first poll after install, existing orders/transactions are
 recorded silently instead of all being reported as "new" - only changes
@@ -64,15 +63,26 @@ from that point on get pushed.
 
 ## Returns QR status
 
-Fully wired up end-to-end (storage, poller, `/returns`), except the two
-functions that actually talk to Amazon's returns pages - `amazon-orders`
-doesn't cover returns at all, and the real page/DOM structure can't be
-worked out without driving a real return through amazon.com once.
-`amazon_telegram_bot/returns_qr.py` has a numbered research checklist to
-fill in while doing that, then the two `NotImplementedError` stubs there
-are the only things left to write - everything that calls them (the
-poller's proactive push, `/returns`, the `seen_returns` DB table) already
-works and just no-ops until then.
+Implemented, based on a real walkthrough (2026-09-21) since `amazon-orders`
+doesn't cover returns at all. Confirmed and working:
+
+- Listing in-progress returns from `https://www.amazon.com/your-returns`
+- Distinguishing a return's own ID (`rmaId`) from its order number - one
+  order can have more than one return
+- Fetching the QR image, which turned out to be a plain presigned S3 URL,
+  no browser/Playwright needed for this part
+- Detecting a completed return via its status text ("We have issued your
+  refund"), since the QR image stays on the page even after completion
+
+Best-effort / not yet confirmed against a real example:
+- The exact text for an in-progress status (e.g. "Drop off by [date]")
+- Where the item's description actually lives on the page (falls back to
+  the page `<title>`)
+
+See `amazon_telegram_bot/returns_qr.py`'s docstring for the full breakdown.
+If `/returns` or a return notification looks wrong, it's most likely one
+of these two guesses - report back what you actually see and they can be
+tightened up.
 
 ## Unraid (Community Applications)
 

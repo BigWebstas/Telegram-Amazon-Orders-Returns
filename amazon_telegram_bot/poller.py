@@ -91,8 +91,9 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
                 await app.bot.send_message(chat_id=chat_id, text=_format_transaction_message(transaction))
             storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
 
-    # Stays a no-op (empty list) until returns_qr.get_returns_in_progress is
-    # implemented - see that module's docstring for the research checklist.
+    # NotImplementedError kept here for safety, but get_returns_in_progress
+    # is implemented now - see that module's docstring for what's confirmed
+    # vs. still a best-effort guess (status text, item descriptions).
     try:
         returns = await asyncio.to_thread(returns_qr.get_returns_in_progress, amazon.session)
     except NotImplementedError:
@@ -121,7 +122,9 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         # Deliberately not gated on is_bootstrap: the QR is something you
         # actually need to complete the return, so a pre-existing one from
         # before the bot started shouldn't be swallowed silently.
-        await returns_qr.send_return_qr_if_ready(amazon.session, storage, ret.return_id, _send_photo)
+        await returns_qr.send_return_qr_if_ready(
+            amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo
+        )
 
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())
 

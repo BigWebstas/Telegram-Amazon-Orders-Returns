@@ -2,9 +2,10 @@ import asyncio
 import datetime
 import logging
 
+import paho.mqtt.client as mqtt
 from telegram.ext import Application
 
-from amazon_telegram_bot import returns_qr
+from amazon_telegram_bot import mqtt_publisher, returns_qr
 from amazon_telegram_bot.amazon_client import AmazonClient, SessionNotReady
 from amazon_telegram_bot.config import Config
 from amazon_telegram_bot.storage import Storage
@@ -14,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 def _is_delivered_status(status: str | None) -> bool:
     return bool(status) and status.strip().lower().startswith("delivered")
+
+
+def _is_active_order(order) -> bool:
+    if order.cancelled:
+        return False
+    status = order.shipments[0].delivery_status if order.shipments else None
+    return (status or "").strip().lower().startswith("arriving")
 
 
 def _total_str(order) -> str:
@@ -55,7 +63,14 @@ def _format_transaction_message(transaction) -> str:
     )
 
 
-async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, chat_id: int) -> None:
+async def _poll_once(
+    amazon: AmazonClient,
+    storage: Storage,
+    app: Application,
+    chat_id: int,
+    mqtt_client: mqtt.Client | None,
+    config: Config,
+) -> None:
     # On the very first poll ever, seen_orders/seen_transactions are empty, so
     # every existing order/transaction would otherwise look "new" and flood
     # the chat. Seed storage silently instead - only report what changes
@@ -132,14 +147,32 @@ async def _poll_once(amazon: AmazonClient, storage: Storage, app: Application, c
         if should_announce and not sent_with_photo:
             await app.bot.send_message(chat_id=chat_id, text=message_text)
 
+    if mqtt_client:
+        # Reuses orders/returns already fetched this cycle rather than
+        # issuing extra Amazon requests just for the sensor counts.
+        deliveries_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=3)).isoformat()
+        mqtt_publisher.publish_counts(
+            mqtt_client,
+            config,
+            active_orders=sum(1 for o in orders if _is_active_order(o)),
+            returns_in_progress=len(returns),
+            deliveries_last_3_days=len(storage.get_recent_deliveries(deliveries_cutoff)),
+        )
+
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())
 
 
-async def run(config: Config, amazon: AmazonClient, storage: Storage, app: Application) -> None:
+async def run(
+    config: Config,
+    amazon: AmazonClient,
+    storage: Storage,
+    app: Application,
+    mqtt_client: mqtt.Client | None = None,
+) -> None:
     already_alerted_auth_failure = False
     while True:
         try:
-            await _poll_once(amazon, storage, app, config.telegram_chat_id)
+            await _poll_once(amazon, storage, app, config.telegram_chat_id, mqtt_client, config)
             already_alerted_auth_failure = False
         except SessionNotReady:
             if not already_alerted_auth_failure:

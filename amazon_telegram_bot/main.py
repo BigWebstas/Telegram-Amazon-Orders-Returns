@@ -3,7 +3,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-from amazon_telegram_bot import poller
+from amazon_telegram_bot import mqtt_publisher, poller
 from amazon_telegram_bot.amazon_client import AmazonClient
 from amazon_telegram_bot.config import Config, load_config
 from amazon_telegram_bot.storage import Storage
@@ -31,8 +31,12 @@ def main() -> None:
     storage = Storage(config.db_path)
     app = build_application(config, amazon, storage)
 
+    mqtt_client = mqtt_publisher.connect(config)
+    if mqtt_client:
+        mqtt_publisher.publish_discovery(mqtt_client, config)
+
     async def start_poller(_app):
-        asyncio.create_task(poller.run(config, amazon, storage, app))
+        asyncio.create_task(poller.run(config, amazon, storage, app, mqtt_client))
 
     app.post_init = start_poller
     app.run_polling()

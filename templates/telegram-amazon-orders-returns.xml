@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns/issues</Support>
   <Project>https://github.com/bigwebstas/Telegram-Amazon-Orders-Returns</Project>
-  <Overview>Polls your own Amazon account for order, delivery, and transaction activity (via the unofficial amazon-orders library) and pushes updates to Telegram. No web UI - interact through Telegram bot commands (/orders, /delivered, /transactions, /returns, /status). Returns QR tracking is wired up but the Amazon-side parsing isn't implemented yet.</Overview>
+  <Overview>Polls your own Amazon account for order, delivery, return, and transaction activity (via the unofficial amazon-orders library) and pushes updates to Telegram, including return drop-off QR codes. No web UI - interact through Telegram bot commands (/orders, /delivered, /transactions, /returns, /status). Optionally publishes active-orders/returns-in-progress/recent-deliveries counts to Home Assistant via MQTT.</Overview>
   <Category>Tools:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/bigwebstas/Telegram-Amazon-Orders-Returns/main/templates/telegram-amazon-orders-returns.xml</TemplateURL>
@@ -25,4 +25,9 @@
   <Config Name="Telegram Bot Token" Target="TELEGRAM_BOT_TOKEN" Default="" Mode="" Description="Bot token from @BotFather on Telegram." Type="Variable" Display="always" Required="true" Mask="true"></Config>
   <Config Name="Telegram Chat ID" Target="TELEGRAM_CHAT_ID" Default="" Mode="" Description="Your personal Telegram chat id (from @userinfobot). Only this chat is served." Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="Poll Interval Minutes" Target="POLL_INTERVAL_MINUTES" Default="30" Mode="" Description="How often to poll Amazon for new orders/transactions, in minutes." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+  <Config Name="MQTT Host" Target="MQTT_HOST" Default="" Mode="" Description="Optional: MQTT broker hostname/IP, to publish order/return/delivery counts to Home Assistant. Leave blank to disable." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="MQTT Port" Target="MQTT_PORT" Default="1883" Mode="" Description="MQTT broker port." Type="Variable" Display="advanced" Required="false" Mask="false">1883</Config>
+  <Config Name="MQTT Username" Target="MQTT_USERNAME" Default="" Mode="" Description="MQTT broker username, if required." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="MQTT Password" Target="MQTT_PASSWORD" Default="" Mode="" Description="MQTT broker password, if required." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="MQTT Topic Prefix" Target="MQTT_TOPIC_PREFIX" Default="amazon_orders_returns" Mode="" Description="Topic prefix for published sensor values." Type="Variable" Display="advanced" Required="false" Mask="false">amazon_orders_returns</Config>
 </Container>

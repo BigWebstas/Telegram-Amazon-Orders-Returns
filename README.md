@@ -93,6 +93,24 @@ See `amazon_telegram_bot/returns_qr.py`'s docstring for the full breakdown.
 If `/returns` or a return notification looks off, it's likely one of
 these two remaining guesses - report back what you actually see.
 
+## Home Assistant (MQTT)
+
+Optional - set `MQTT_HOST` in `.env` (or the Unraid template's advanced
+settings) to publish three counts to an existing MQTT broker, using Home
+Assistant's MQTT Discovery so they appear automatically as sensors under
+one device, no `configuration.yaml` editing needed:
+
+- **Active Orders** - orders currently "Arriving"
+- **Returns In Progress** - returns not yet completed
+- **Deliveries (Last 3 Days)** - same window `/delivered` uses
+
+Published (retained) every poll cycle, reusing the orders/returns data
+already fetched that cycle rather than issuing extra Amazon requests.
+An availability topic (`<MQTT_TOPIC_PREFIX>/status`) marks the sensors
+unavailable in HA if the bot goes down, via MQTT's Last Will. Leave
+`MQTT_HOST` blank and none of this runs - no connection attempt, no
+behavior change.
+
 ## Unraid (Community Applications)
 
 The published image is `ghcr.io/bigwebstas/telegram-amazon-orders-returns:latest`,

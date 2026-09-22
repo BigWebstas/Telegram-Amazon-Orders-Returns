@@ -17,11 +17,20 @@ def _is_delivered_status(status: str | None) -> bool:
     return bool(status) and status.strip().lower().startswith("delivered")
 
 
+def _shipment_status(order) -> str | None:
+    return order.shipments[0].delivery_status if order.shipments else None
+
+
 def _is_active_order(order) -> bool:
     if order.cancelled:
         return False
-    status = order.shipments[0].delivery_status if order.shipments else None
-    return (status or "").strip().lower().startswith("arriving")
+    return (_shipment_status(order) or "").strip().lower().startswith("arriving")
+
+
+def _is_arriving_today(order) -> bool:
+    if order.cancelled:
+        return False
+    return (_shipment_status(order) or "").strip().lower() == "arriving today"
 
 
 def _total_str(order) -> str:
@@ -150,13 +159,19 @@ async def _poll_once(
     if mqtt_client:
         # Reuses orders/returns already fetched this cycle rather than
         # issuing extra Amazon requests just for the sensor counts.
-        deliveries_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=3)).isoformat()
+        now = datetime.datetime.utcnow()
+        deliveries_3day_cutoff = (now - datetime.timedelta(days=3)).isoformat()
+        # UTC calendar day, consistent with every other timestamp this bot
+        # stores - may not line up with your local "today" near midnight.
+        today_cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
         mqtt_publisher.publish_counts(
             mqtt_client,
             config,
             active_orders=sum(1 for o in orders if _is_active_order(o)),
             returns_in_progress=len(returns),
-            deliveries_last_3_days=len(storage.get_recent_deliveries(deliveries_cutoff)),
+            deliveries_last_3_days=len(storage.get_recent_deliveries(deliveries_3day_cutoff)),
+            delivered_today=len(storage.get_recent_deliveries(today_cutoff)),
+            will_be_delivered_today=sum(1 for o in orders if _is_arriving_today(o)),
         )
 
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())

@@ -103,6 +103,9 @@ one device, no `configuration.yaml` editing needed:
 - **Active Orders** - orders currently "Arriving"
 - **Returns In Progress** - returns not yet completed
 - **Deliveries (Last 3 Days)** - same window `/delivered` uses
+- **Delivered Today** - deliveries observed since UTC midnight
+- **Will Be Delivered Today** - active orders whose status is exactly
+  "Arriving today"
 
 Published every poll cycle, reusing the orders/returns data already
 fetched that cycle rather than issuing extra Amazon requests. Retained

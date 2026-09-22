@@ -4,7 +4,7 @@ Entirely optional - every function here is only called if MQTT_HOST is
 configured (see config.py). With it unset, connect() returns None and
 nothing else in this module runs.
 
-Uses Home Assistant's MQTT Discovery so the three sensors below appear
+Uses Home Assistant's MQTT Discovery so the sensors below appear
 automatically under one device in HA, with no manual configuration.yaml
 entries needed: https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
 
@@ -43,6 +43,18 @@ _SENSORS = [
         "icon": "mdi:package-check",
         "unit": "packages",
     },
+    {
+        "key": "delivered_today",
+        "name": "Delivered Today",
+        "icon": "mdi:package-check",
+        "unit": "packages",
+    },
+    {
+        "key": "will_be_delivered_today",
+        "name": "Will Be Delivered Today",
+        "icon": "mdi:truck-delivery",
+        "unit": "packages",
+    },
 ]
 
 
@@ -79,8 +91,8 @@ def connect(config: Config) -> mqtt.Client | None:
 
 
 def publish_discovery(client: mqtt.Client, config: Config) -> None:
-    """Publish retained HA MQTT Discovery config payloads for all three
-    sensors, grouped under one device. Safe to call every startup -
+    """Publish retained HA MQTT Discovery config payloads for all sensors
+    in _SENSORS, grouped under one device. Safe to call every startup -
     retained + idempotent, so HA just picks up the same config again."""
     device = {
         "identifiers": [_DEVICE_ID],
@@ -109,14 +121,18 @@ def publish_counts(
     active_orders: int,
     returns_in_progress: int,
     deliveries_last_3_days: int,
+    delivered_today: int,
+    will_be_delivered_today: int,
 ) -> None:
-    """Publish the three current counts. Retained by default (config.mqtt_retain)
+    """Publish the current sensor counts. Retained by default (config.mqtt_retain)
     so HA has a value immediately on restart rather than waiting for the
     next poll - set MQTT_RETAIN=false to publish non-retained instead."""
     values = {
         "active_orders": active_orders,
         "returns_in_progress": returns_in_progress,
         "deliveries_last_3_days": deliveries_last_3_days,
+        "delivered_today": delivered_today,
+        "will_be_delivered_today": will_be_delivered_today,
     }
     for key, value in values.items():
         client.publish(f"{config.mqtt_topic_prefix}/{key}/state", payload=str(value), retain=config.mqtt_retain)

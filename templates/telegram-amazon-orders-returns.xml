@@ -30,4 +30,5 @@
   <Config Name="MQTT Username" Target="MQTT_USERNAME" Default="" Mode="" Description="MQTT broker username, if required." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="MQTT Password" Target="MQTT_PASSWORD" Default="" Mode="" Description="MQTT broker password, if required." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
   <Config Name="MQTT Topic Prefix" Target="MQTT_TOPIC_PREFIX" Default="amazon_orders_returns" Mode="" Description="Topic prefix for published sensor values." Type="Variable" Display="advanced" Required="false" Mask="false">amazon_orders_returns</Config>
+  <Config Name="MQTT Retain" Target="MQTT_RETAIN" Default="true" Mode="" Description="Retain published sensor values so Home Assistant has them immediately on restart. Discovery configs are always retained regardless." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
 </Container>

@@ -19,6 +19,7 @@ class Config:
     mqtt_username: str | None
     mqtt_password: str | None
     mqtt_topic_prefix: str
+    mqtt_retain: bool
 
     @property
     def amazon_config_dir(self) -> str:
@@ -53,4 +54,5 @@ def load_config() -> Config:
         mqtt_username=os.environ.get("MQTT_USERNAME") or None,
         mqtt_password=os.environ.get("MQTT_PASSWORD") or None,
         mqtt_topic_prefix=os.environ.get("MQTT_TOPIC_PREFIX", "amazon_orders_returns"),
+        mqtt_retain=os.environ.get("MQTT_RETAIN", "true").strip().lower() not in ("false", "0", "no"),
     )

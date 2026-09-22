@@ -104,12 +104,15 @@ one device, no `configuration.yaml` editing needed:
 - **Returns In Progress** - returns not yet completed
 - **Deliveries (Last 3 Days)** - same window `/delivered` uses
 
-Published (retained) every poll cycle, reusing the orders/returns data
-already fetched that cycle rather than issuing extra Amazon requests.
-An availability topic (`<MQTT_TOPIC_PREFIX>/status`) marks the sensors
-unavailable in HA if the bot goes down, via MQTT's Last Will. Leave
-`MQTT_HOST` blank and none of this runs - no connection attempt, no
-behavior change.
+Published every poll cycle, reusing the orders/returns data already
+fetched that cycle rather than issuing extra Amazon requests. Retained
+by default (`MQTT_RETAIN=true`) so HA has a value immediately on
+restart instead of waiting for the next poll - set it to `false` to
+publish non-retained instead. Discovery configs and the availability
+topic (`<MQTT_TOPIC_PREFIX>/status`, via MQTT's Last Will, so HA marks
+the sensors unavailable if the bot goes down) are always retained
+regardless of that setting. Leave `MQTT_HOST` blank and none of this
+runs - no connection attempt, no behavior change.
 
 ## Unraid (Community Applications)
 

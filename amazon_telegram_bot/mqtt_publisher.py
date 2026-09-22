@@ -7,6 +7,10 @@ nothing else in this module runs.
 Uses Home Assistant's MQTT Discovery so the three sensors below appear
 automatically under one device in HA, with no manual configuration.yaml
 entries needed: https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
+
+Discovery config payloads and the availability topic are always retained
+- that's required for HA to pick them up correctly on restart. Only the
+sensor *state* values (publish_counts) respect config.mqtt_retain.
 """
 
 import json
@@ -106,12 +110,13 @@ def publish_counts(
     returns_in_progress: int,
     deliveries_last_3_days: int,
 ) -> None:
-    """Publish the three current counts (retained, so HA has a value
-    immediately on restart rather than waiting for the next poll)."""
+    """Publish the three current counts. Retained by default (config.mqtt_retain)
+    so HA has a value immediately on restart rather than waiting for the
+    next poll - set MQTT_RETAIN=false to publish non-retained instead."""
     values = {
         "active_orders": active_orders,
         "returns_in_progress": returns_in_progress,
         "deliveries_last_3_days": deliveries_last_3_days,
     }
     for key, value in values.items():
-        client.publish(f"{config.mqtt_topic_prefix}/{key}/state", payload=str(value), retain=True)
+        client.publish(f"{config.mqtt_topic_prefix}/{key}/state", payload=str(value), retain=config.mqtt_retain)

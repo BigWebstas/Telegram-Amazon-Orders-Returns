@@ -3,6 +3,7 @@ import datetime
 import logging
 
 import paho.mqtt.client as mqtt
+from telegram.error import RetryAfter, TelegramError
 from telegram.ext import Application
 
 from amazon_telegram_bot import mqtt_publisher, returns_qr
@@ -72,6 +73,29 @@ def _format_transaction_message(transaction) -> str:
     )
 
 
+async def _try_send_message(app: Application, chat_id: int, text: str) -> bool:
+    # A single Telegram failure here must never abort the whole poll cycle -
+    # that used to propagate out of _poll_once, get swallowed by run()'s
+    # blanket except, and skip storage.set_last_poll_at(). The next cycle
+    # would then resume mid-batch, drip-feeding whatever was left (including
+    # months-old transactions still inside the fetch window) out as "new"
+    # messages across repeated crash/retry cycles.
+    try:
+        await app.bot.send_message(chat_id=chat_id, text=text)
+        return True
+    except RetryAfter as exc:
+        await asyncio.sleep(exc.retry_after + 1)
+        try:
+            await app.bot.send_message(chat_id=chat_id, text=text)
+            return True
+        except TelegramError:
+            logger.exception("Failed to send Telegram message even after flood-control wait.")
+            return False
+    except TelegramError:
+        logger.exception("Failed to send Telegram message.")
+        return False
+
+
 async def _poll_once(
     amazon: AmazonClient,
     storage: Storage,
@@ -94,15 +118,21 @@ async def _poll_once(
         changed = previous_status is not None and previous_status != status
         became_delivered = changed and _is_delivered_status(status) and not _is_delivered_status(previous_status)
 
+        notified = True  # nothing to deliver this cycle unless a branch below sends something
         if is_new and not is_bootstrap:
-            await app.bot.send_message(chat_id=chat_id, text=_format_new_order_message(order))
+            notified = await _try_send_message(app, chat_id, _format_new_order_message(order))
         elif changed:
             if became_delivered:
-                await app.bot.send_message(chat_id=chat_id, text=_format_delivered_message(order))
+                notified = await _try_send_message(app, chat_id, _format_delivered_message(order))
             else:
-                await app.bot.send_message(
-                    chat_id=chat_id, text=_format_status_change_message(order, previous_status, status)
+                notified = await _try_send_message(
+                    app, chat_id, _format_status_change_message(order, previous_status, status)
                 )
+
+        if not notified:
+            # Leave storage untouched so this same change is detected and
+            # retried on the next poll instead of being silently lost.
+            continue
 
         now = datetime.datetime.utcnow().isoformat()
         # Only stamp delivered_at on an observed transition, not on first sight -
@@ -114,13 +144,17 @@ async def _poll_once(
             order.order_number, status, now, order.grand_total, order.cancelled, _item_description(order)
         )
 
-    transactions = await asyncio.to_thread(amazon.fetch_transactions)
+    transactions = await asyncio.to_thread(amazon.fetch_transactions, config.transaction_lookback_days)
     for transaction in transactions:
         key = f"{transaction.order_number}:{transaction.completed_date}:{transaction.grand_total}"
-        if storage.is_new_transaction(key):
-            if not is_bootstrap:
-                await app.bot.send_message(chat_id=chat_id, text=_format_transaction_message(transaction))
+        if not storage.is_new_transaction(key):
+            continue
+        if is_bootstrap:
             storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
+            continue
+        if await _try_send_message(app, chat_id, _format_transaction_message(transaction)):
+            storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
+        # else: leave unmarked so it's retried (and actually delivered) next cycle
 
     # NotImplementedError kept here for safety, but get_returns_in_progress
     # is implemented now - see that module's docstring for what's confirmed

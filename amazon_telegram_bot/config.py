@@ -13,6 +13,7 @@ class Config:
     telegram_bot_token: str
     telegram_chat_id: int
     poll_interval_minutes: int
+    transaction_lookback_days: int
     data_dir: str
     mqtt_host: str | None
     mqtt_port: int
@@ -48,6 +49,7 @@ def load_config() -> Config:
         telegram_bot_token=_require("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=int(_require("TELEGRAM_CHAT_ID")),
         poll_interval_minutes=int(os.environ.get("POLL_INTERVAL_MINUTES", "30")),
+        transaction_lookback_days=int(os.environ.get("TRANSACTION_LOOKBACK_DAYS", "14")),
         data_dir=os.environ.get("DATA_DIR", "/data"),
         mqtt_host=os.environ.get("MQTT_HOST") or None,
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),

@@ -66,6 +66,12 @@ class AmazonClient:
         self.ensure_logged_in()
         return AmazonOrders(self._session).get_order_history(year=year)
 
-    def fetch_transactions(self):
+    def fetch_transactions(self, days: int = 365):
+        # amazonorders defaults to days=365, which means every poll re-fetches
+        # a full year of history. The poller passes a much smaller window
+        # (Config.transaction_lookback_days) so a fleeting Telegram failure
+        # can't strand months of already-old transactions as "new" for the
+        # next cycle to resend. Interactive commands can still ask for the
+        # full year by leaving the default.
         self.ensure_logged_in()
-        return AmazonTransactions(self._session).get_transactions()
+        return AmazonTransactions(self._session).get_transactions(days=days)

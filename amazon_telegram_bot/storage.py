@@ -65,6 +65,14 @@ class Storage:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sent_messages (
+                    message_id INTEGER PRIMARY KEY,
+                    sent_at TEXT NOT NULL
+                )
+                """
+            )
 
     def get_order_status(self, order_number: str) -> str | None:
         with self._connect() as conn:
@@ -183,6 +191,30 @@ class Storage:
             conn.execute(
                 "UPDATE seen_returns SET qr_sent = 1 WHERE return_id = ?",
                 (return_id,),
+            )
+
+    def record_sent_message(self, message_id: int, sent_at: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO sent_messages (message_id, sent_at) VALUES (?, ?)",
+                (message_id, sent_at),
+            )
+
+    def get_sent_messages_older_than(self, cutoff_iso: str) -> list[int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT message_id FROM sent_messages WHERE sent_at < ?",
+                (cutoff_iso,),
+            ).fetchall()
+            return [row[0] for row in rows]
+
+    def delete_sent_message_records(self, message_ids: list[int]) -> None:
+        if not message_ids:
+            return
+        with self._connect() as conn:
+            conn.executemany(
+                "DELETE FROM sent_messages WHERE message_id = ?",
+                [(message_id,) for message_id in message_ids],
             )
 
     def get_last_poll_at(self) -> str | None:

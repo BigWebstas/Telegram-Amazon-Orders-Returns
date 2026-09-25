@@ -5,7 +5,7 @@ import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from amazon_telegram_bot import returns_qr
+from amazon_telegram_bot import returns_qr, telegram_send
 from amazon_telegram_bot.amazon_client import AmazonClient, SessionNotReady
 from amazon_telegram_bot.config import Config
 from amazon_telegram_bot.storage import Storage
@@ -52,14 +52,16 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             try:
                 orders = await asyncio.to_thread(amazon.fetch_orders_for_year, year)
             except SessionNotReady as exc:
-                await update.message.reply_text(str(exc))
+                await telegram_send.reply_text(update, storage, str(exc))
                 return
             if not orders:
-                await update.message.reply_text("No orders found.")
+                await telegram_send.reply_text(update, storage, "No orders found.")
                 return
             for o in orders[:20]:
-                await update.message.reply_text(
-                    _format_order_listing_message(o.order_number, _item_description(o), o.grand_total, _order_status(o))
+                await telegram_send.reply_text(
+                    update,
+                    storage,
+                    _format_order_listing_message(o.order_number, _item_description(o), o.grand_total, _order_status(o)),
                 )
             return
 
@@ -70,7 +72,7 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             try:
                 orders = await asyncio.to_thread(amazon.fetch_recent_orders, "last30")
             except SessionNotReady as exc:
-                await update.message.reply_text(str(exc))
+                await telegram_send.reply_text(update, storage, str(exc))
                 return
             rows = [
                 (
@@ -89,12 +91,14 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             if _is_active_status(status, cancelled)
         ]
         if not active:
-            await update.message.reply_text("No active orders.")
+            await telegram_send.reply_text(update, storage, "No active orders.")
             return
 
         for number, status, total, item_description in active[:20]:
-            await update.message.reply_text(
-                _format_order_listing_message(number, item_description or "Unknown item", total, status)
+            await telegram_send.reply_text(
+                update,
+                storage,
+                _format_order_listing_message(number, item_description or "Unknown item", total, status),
             )
 
     async def transactions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -103,11 +107,11 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
         try:
             transactions = await asyncio.to_thread(amazon.fetch_transactions)
         except SessionNotReady as exc:
-            await update.message.reply_text(str(exc))
+            await telegram_send.reply_text(update, storage, str(exc))
             return
 
         if not transactions:
-            await update.message.reply_text("No transactions found.")
+            await telegram_send.reply_text(update, storage, "No transactions found.")
             return
 
         lines = [
@@ -115,7 +119,7 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             f"{t.order_number or 'n/a'} - {t.completed_date}"
             for t in transactions[:20]
         ]
-        await update.message.reply_text("\n".join(lines))
+        await telegram_send.reply_text(update, storage, "\n".join(lines))
 
     async def returns_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
@@ -124,17 +128,19 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             await asyncio.to_thread(amazon.ensure_logged_in)
             returns = await asyncio.to_thread(returns_qr.get_returns_in_progress, amazon.session)
         except SessionNotReady as exc:
-            await update.message.reply_text(str(exc))
+            await telegram_send.reply_text(update, storage, str(exc))
             return
         except NotImplementedError:
-            await update.message.reply_text(
+            await telegram_send.reply_text(
+                update,
+                storage,
                 "Returns tracking and QR codes aren't implemented yet. "
-                "See amazon_telegram_bot/returns_qr.py for the plan."
+                "See amazon_telegram_bot/returns_qr.py for the plan.",
             )
             return
 
         if not returns:
-            await update.message.reply_text("No returns in progress.")
+            await telegram_send.reply_text(update, storage, "No returns in progress.")
             return
 
         for ret in returns:
@@ -143,13 +149,13 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             async def _send_photo(photo_bytes: bytes, _text=message_text) -> None:
                 # Photo caption carries the full status text, so this is one
                 # message instead of a separate text message plus a photo.
-                await update.message.reply_photo(photo=photo_bytes, caption=_text)
+                await telegram_send.reply_photo(update, storage, photo_bytes, _text)
 
             sent_with_photo = await returns_qr.send_return_qr_if_ready(
                 amazon.session, storage, ret.return_id, ret.return_details_link, _send_photo, force=True
             )
             if not sent_with_photo:
-                await update.message.reply_text(message_text)
+                await telegram_send.reply_text(update, storage, message_text)
 
     async def delivered_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
@@ -158,10 +164,12 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
         rows = storage.get_recent_deliveries(cutoff)
 
         if not rows:
-            await update.message.reply_text(
+            await telegram_send.reply_text(
+                update,
+                storage,
                 "No deliveries tracked in the last 3 days. Only deliveries the "
                 "bot observed while running count here - it doesn't back-date "
-                "ones from before it started polling."
+                "ones from before it started polling.",
             )
             return
 
@@ -169,13 +177,13 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
         for order_number, delivered_at, grand_total in rows[:20]:
             total = f"${grand_total:.2f}" if grand_total is not None else "unknown total"
             lines.append(f"{order_number} - {total} - delivered {delivered_at[:10]}")
-        await update.message.reply_text("\n".join(lines))
+        await telegram_send.reply_text(update, storage, "\n".join(lines))
 
     async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(config, update):
             return
 
-        await update.message.reply_text("Checking Amazon login...")
+        await telegram_send.reply_text(update, storage, "Checking Amazon login...")
         try:
             # No-ops if already authenticated, so this only pays the login-flow
             # cost when the cached session actually needs it.
@@ -185,21 +193,50 @@ def build_application(config: Config, amazon: AmazonClient, storage: Storage) ->
             session_state = f"NOT authenticated - {exc}"
 
         last_poll_at = storage.get_last_poll_at()
-        await update.message.reply_text(
+        await telegram_send.reply_text(
+            update,
+            storage,
             f"Amazon session: {session_state}\n"
-            f"Last successful poll: {last_poll_at or 'never'}"
+            f"Last successful poll: {last_poll_at or 'never'}",
         )
 
         if os.path.exists(config.log_path) and os.path.getsize(config.log_path) > 0:
             with open(config.log_path, "rb") as log_file:
-                await update.message.reply_document(document=log_file, filename="bot.log")
+                await telegram_send.reply_document(update, storage, log_file, filename="bot.log")
         else:
-            await update.message.reply_text("No logs written yet.")
+            await telegram_send.reply_text(update, storage, "No logs written yet.")
+
+    async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not _authorized(config, update):
+            return
+
+        if not context.args:
+            await telegram_send.reply_text(
+                update, storage, "Usage: /clear <days> - deletes bot messages older than that many days."
+            )
+            return
+
+        try:
+            days = int(context.args[0])
+        except ValueError:
+            await telegram_send.reply_text(update, storage, "Days must be a whole number, e.g. /clear 10")
+            return
+        if days < 0:
+            await telegram_send.reply_text(update, storage, "Days must be zero or greater.")
+            return
+
+        deleted, failed = await telegram_send.clear_messages_older_than(app, storage, update.effective_chat.id, days)
+
+        summary = f"\U0001F5D1 Cleared {deleted} message(s) older than {days} day(s)."
+        if failed:
+            summary += f" {failed} couldn't be deleted (already removed, or too old for Telegram to delete)."
+        await telegram_send.reply_text(update, storage, summary)
 
     app.add_handler(CommandHandler("orders", orders_command))
     app.add_handler(CommandHandler("delivered", delivered_command))
     app.add_handler(CommandHandler("transactions", transactions_command))
     app.add_handler(CommandHandler("returns", returns_command))
     app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("clear", clear_command))
 
     return app

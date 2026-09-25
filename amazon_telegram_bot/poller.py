@@ -3,10 +3,9 @@ import datetime
 import logging
 
 import paho.mqtt.client as mqtt
-from telegram.error import RetryAfter, TelegramError
 from telegram.ext import Application
 
-from amazon_telegram_bot import mqtt_publisher, returns_qr
+from amazon_telegram_bot import mqtt_publisher, returns_qr, telegram_send
 from amazon_telegram_bot.amazon_client import AmazonClient, SessionNotReady
 from amazon_telegram_bot.config import Config
 from amazon_telegram_bot.storage import Storage
@@ -73,27 +72,16 @@ def _format_transaction_message(transaction) -> str:
     )
 
 
-async def _try_send_message(app: Application, chat_id: int, text: str) -> bool:
+async def _try_send_message(app: Application, storage: Storage, chat_id: int, text: str) -> bool:
     # A single Telegram failure here must never abort the whole poll cycle -
     # that used to propagate out of _poll_once, get swallowed by run()'s
     # blanket except, and skip storage.set_last_poll_at(). The next cycle
     # would then resume mid-batch, drip-feeding whatever was left (including
     # months-old transactions still inside the fetch window) out as "new"
-    # messages across repeated crash/retry cycles.
-    try:
-        await app.bot.send_message(chat_id=chat_id, text=text)
-        return True
-    except RetryAfter as exc:
-        await asyncio.sleep(exc.retry_after + 1)
-        try:
-            await app.bot.send_message(chat_id=chat_id, text=text)
-            return True
-        except TelegramError:
-            logger.exception("Failed to send Telegram message even after flood-control wait.")
-            return False
-    except TelegramError:
-        logger.exception("Failed to send Telegram message.")
-        return False
+    # messages across repeated crash/retry cycles. telegram_send.send_message
+    # already handles the retry/swallow; this just turns its result into the
+    # bool the call sites below branch on.
+    return await telegram_send.send_message(app, storage, chat_id, text) is not None
 
 
 async def _poll_once(
@@ -120,13 +108,13 @@ async def _poll_once(
 
         notified = True  # nothing to deliver this cycle unless a branch below sends something
         if is_new and not is_bootstrap:
-            notified = await _try_send_message(app, chat_id, _format_new_order_message(order))
+            notified = await _try_send_message(app, storage, chat_id, _format_new_order_message(order))
         elif changed:
             if became_delivered:
-                notified = await _try_send_message(app, chat_id, _format_delivered_message(order))
+                notified = await _try_send_message(app, storage, chat_id, _format_delivered_message(order))
             else:
                 notified = await _try_send_message(
-                    app, chat_id, _format_status_change_message(order, previous_status, status)
+                    app, storage, chat_id, _format_status_change_message(order, previous_status, status)
                 )
 
         if not notified:
@@ -152,7 +140,7 @@ async def _poll_once(
         if is_bootstrap:
             storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
             continue
-        if await _try_send_message(app, chat_id, _format_transaction_message(transaction)):
+        if await _try_send_message(app, storage, chat_id, _format_transaction_message(transaction)):
             storage.mark_transaction_seen(key, datetime.datetime.utcnow().isoformat())
         # else: leave unmarked so it's retried (and actually delivered) next cycle
 
@@ -175,7 +163,7 @@ async def _poll_once(
         async def _send_photo(photo_bytes: bytes, _text=message_text) -> None:
             # Photo caption carries the full status text, so a return that
             # already has its QR ready gets one message, not two.
-            await app.bot.send_photo(chat_id=chat_id, photo=photo_bytes, caption=_text)
+            await telegram_send.send_photo(app, storage, chat_id, photo_bytes, _text)
 
         # Deliberately not gated on is_bootstrap: the QR is something you
         # actually need to complete the return, so a pre-existing one from
@@ -188,7 +176,7 @@ async def _poll_once(
         # return AND the combined photo+caption didn't already cover it
         # (no QR ready yet, or it wasn't a drop-off return at all).
         if should_announce and not sent_with_photo:
-            await app.bot.send_message(chat_id=chat_id, text=message_text)
+            await telegram_send.send_message(app, storage, chat_id, message_text)
 
     if mqtt_client:
         # Reuses orders/returns already fetched this cycle rather than
@@ -225,13 +213,13 @@ async def run(
             already_alerted_auth_failure = False
         except SessionNotReady:
             if not already_alerted_auth_failure:
-                await app.bot.send_message(
-                    chat_id=config.telegram_chat_id,
-                    text=(
-                        "⚠️ Amazon session expired. Run "
-                        "`docker compose run --rm bot python -m amazon_telegram_bot.login_cli` "
-                        "to reauthenticate."
-                    ),
+                await telegram_send.send_message(
+                    app,
+                    storage,
+                    config.telegram_chat_id,
+                    "⚠️ Amazon session expired. Run "
+                    "`docker compose run --rm bot python -m amazon_telegram_bot.login_cli` "
+                    "to reauthenticate.",
                 )
                 already_alerted_auth_failure = True
             logger.warning("Amazon session not ready, skipping this poll cycle.")

@@ -47,6 +47,11 @@ bot will send you a Telegram message telling you to re-run step 3.
 - `/returns` — lists in-progress returns and sends any available QR code.
   See [Returns QR status](#returns-qr-status) for what's confirmed vs.
   still a best-effort guess.
+- `/clear <days>` — deletes every message the bot has sent that's older
+  than `<days>` days, e.g. `/clear 10` clears anything older than 10 days.
+  Only messages sent after this feature was added are trackable, so older
+  history won't be cleared. Telegram only lets a bot delete its own
+  messages, so this never touches anything anyone else posted.
 
 The bot also polls in the background (every `POLL_INTERVAL_MINUTES`,
 default 30) and pushes a message the moment it sees:

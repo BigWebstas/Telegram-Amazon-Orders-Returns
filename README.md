@@ -159,8 +159,12 @@ broken image in Apps.
 
 ## Notes
 
-- Only the `TELEGRAM_CHAT_ID` you configure is served; the bot ignores
-  messages from any other chat.
+- Only the `TELEGRAM_CHAT_ID` (and `TELEGRAM_RETURNS_CHAT_ID`, if set) you
+  configure is served; the bot ignores messages from any other chat.
+- Set `TELEGRAM_RETURNS_CHAT_ID` to split returns (and their QR codes) into
+  their own chat. Orders, status updates, deliveries, transactions and alerts
+  stay in `TELEGRAM_CHAT_ID`. Commands work in either chat and reply where
+  they were sent; `/clear` only clears the chat it's run in.
 - `amazon-orders` scrapes Amazon's website — there's no official API for
   this, so expect it to occasionally need re-login if Amazon changes its
   challenge flow or the session cookie expires.

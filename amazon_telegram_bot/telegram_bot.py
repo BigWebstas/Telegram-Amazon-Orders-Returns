@@ -12,7 +12,10 @@ from amazon_telegram_bot.storage import Storage
 
 
 def _authorized(config: Config, update: Update) -> bool:
-    return bool(update.effective_chat) and update.effective_chat.id == config.telegram_chat_id
+    return bool(update.effective_chat) and update.effective_chat.id in (
+        config.telegram_chat_id,
+        config.telegram_returns_chat_id,
+    )
 
 
 def _is_active_status(status: str | None, cancelled: bool) -> bool:

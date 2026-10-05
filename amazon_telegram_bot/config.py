@@ -11,7 +11,8 @@ class Config:
     amazon_email: str
     amazon_password: str
     telegram_bot_token: str
-    telegram_chat_id: int
+    telegram_chat_id: int  # orders, deliveries, transactions, alerts
+    telegram_returns_chat_id: int  # returns + QR codes; same as telegram_chat_id unless set
     poll_interval_minutes: int
     transaction_lookback_days: int
     data_dir: str
@@ -48,6 +49,7 @@ def load_config() -> Config:
         amazon_password=_require("AMAZON_PASSWORD"),
         telegram_bot_token=_require("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=int(_require("TELEGRAM_CHAT_ID")),
+        telegram_returns_chat_id=int(os.environ.get("TELEGRAM_RETURNS_CHAT_ID") or _require("TELEGRAM_CHAT_ID")),
         poll_interval_minutes=int(os.environ.get("POLL_INTERVAL_MINUTES", "30")),
         transaction_lookback_days=int(os.environ.get("TRANSACTION_LOOKBACK_DAYS", "14")),
         data_dir=os.environ.get("DATA_DIR", "/data"),

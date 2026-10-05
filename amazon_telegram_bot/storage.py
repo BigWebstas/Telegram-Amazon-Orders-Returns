@@ -4,10 +4,12 @@ from contextlib import contextmanager
 
 
 class Storage:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, legacy_messages_chat_id: int):
+        # legacy_messages_chat_id: the chat every tracked message lived in
+        # before sent_messages recorded a chat_id (only one chat existed then).
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._db_path = db_path
-        self._init_schema()
+        self._init_schema(legacy_messages_chat_id)
 
     @contextmanager
     def _connect(self):
@@ -18,7 +20,7 @@ class Storage:
         finally:
             conn.close()
 
-    def _init_schema(self) -> None:
+    def _init_schema(self, legacy_messages_chat_id: int) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -68,11 +70,36 @@ class Storage:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sent_messages (
-                    message_id INTEGER PRIMARY KEY,
-                    sent_at TEXT NOT NULL
+                    chat_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    PRIMARY KEY (chat_id, message_id)
                 )
                 """
             )
+            # Telegram message ids are only unique per chat, so once messages
+            # go to more than one chat the old message_id-only key collides.
+            # Rebuild that older table, attributing its rows to the one chat
+            # that existed back then.
+            sent_columns = {row[1] for row in conn.execute("PRAGMA table_info(sent_messages)")}
+            if "chat_id" not in sent_columns:
+                conn.execute("ALTER TABLE sent_messages RENAME TO sent_messages_old")
+                conn.execute(
+                    """
+                    CREATE TABLE sent_messages (
+                        chat_id INTEGER NOT NULL,
+                        message_id INTEGER NOT NULL,
+                        sent_at TEXT NOT NULL,
+                        PRIMARY KEY (chat_id, message_id)
+                    )
+                    """
+                )
+                conn.execute(
+                    "INSERT INTO sent_messages (chat_id, message_id, sent_at) "
+                    "SELECT ?, message_id, sent_at FROM sent_messages_old",
+                    (legacy_messages_chat_id,),
+                )
+                conn.execute("DROP TABLE sent_messages_old")
 
     def get_order_status(self, order_number: str) -> str | None:
         with self._connect() as conn:
@@ -193,28 +220,28 @@ class Storage:
                 (return_id,),
             )
 
-    def record_sent_message(self, message_id: int, sent_at: str) -> None:
+    def record_sent_message(self, chat_id: int, message_id: int, sent_at: str) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO sent_messages (message_id, sent_at) VALUES (?, ?)",
-                (message_id, sent_at),
+                "INSERT OR IGNORE INTO sent_messages (chat_id, message_id, sent_at) VALUES (?, ?, ?)",
+                (chat_id, message_id, sent_at),
             )
 
-    def get_sent_messages_older_than(self, cutoff_iso: str) -> list[int]:
+    def get_sent_messages_older_than(self, chat_id: int, cutoff_iso: str) -> list[int]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT message_id FROM sent_messages WHERE sent_at < ?",
-                (cutoff_iso,),
+                "SELECT message_id FROM sent_messages WHERE chat_id = ? AND sent_at < ?",
+                (chat_id, cutoff_iso),
             ).fetchall()
             return [row[0] for row in rows]
 
-    def delete_sent_message_records(self, message_ids: list[int]) -> None:
+    def delete_sent_message_records(self, chat_id: int, message_ids: list[int]) -> None:
         if not message_ids:
             return
         with self._connect() as conn:
             conn.executemany(
-                "DELETE FROM sent_messages WHERE message_id = ?",
-                [(message_id,) for message_id in message_ids],
+                "DELETE FROM sent_messages WHERE chat_id = ? AND message_id = ?",
+                [(chat_id, message_id) for message_id in message_ids],
             )
 
     def get_last_poll_at(self) -> str | None:

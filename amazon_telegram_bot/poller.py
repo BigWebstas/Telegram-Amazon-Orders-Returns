@@ -163,7 +163,7 @@ async def _poll_once(
         async def _send_photo(photo_bytes: bytes, _text=message_text) -> None:
             # Photo caption carries the full status text, so a return that
             # already has its QR ready gets one message, not two.
-            await telegram_send.send_photo(app, storage, chat_id, photo_bytes, _text)
+            await telegram_send.send_photo(app, storage, config.telegram_returns_chat_id, photo_bytes, _text)
 
         # Deliberately not gated on is_bootstrap: the QR is something you
         # actually need to complete the return, so a pre-existing one from
@@ -176,7 +176,7 @@ async def _poll_once(
         # return AND the combined photo+caption didn't already cover it
         # (no QR ready yet, or it wasn't a drop-off return at all).
         if should_announce and not sent_with_photo:
-            await telegram_send.send_message(app, storage, chat_id, message_text)
+            await telegram_send.send_message(app, storage, config.telegram_returns_chat_id, message_text)
 
     if mqtt_client:
         # Reuses orders/returns already fetched this cycle rather than

@@ -7,7 +7,7 @@ telegram_bot.py (on-demand commands):
    any other failure is logged and swallowed (returns None) instead of
    raised, so one bad send can't abort a whole poll cycle or command.
 2. Tracking - every message actually delivered is recorded in storage
-   (message_id + sent_at), which is what /clear (see telegram_bot.py)
+   (chat_id + message_id + sent_at), which is what /clear (see telegram_bot.py)
    uses to find and delete old messages. Only messages sent after this
    was added are trackable - there's no way to retroactively learn the
    IDs/timestamps of messages sent before it existed.
@@ -45,7 +45,7 @@ async def _with_retry(send: Callable[[], Awaitable[Message]]) -> Message | None:
 def _track(storage: Storage, message: Message | None) -> int | None:
     if message is None:
         return None
-    storage.record_sent_message(message.message_id, datetime.datetime.utcnow().isoformat())
+    storage.record_sent_message(message.chat_id, message.message_id, datetime.datetime.utcnow().isoformat())
     return message.message_id
 
 
@@ -102,7 +102,7 @@ async def clear_messages_older_than(app: Application, storage: Storage, chat_id:
     can_delete_messages, which this deliberately doesn't attempt.
     """
     cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).isoformat()
-    message_ids = storage.get_sent_messages_older_than(cutoff)
+    message_ids = storage.get_sent_messages_older_than(chat_id, cutoff)
 
     deleted = 0
     failed = 0
@@ -115,5 +115,5 @@ async def clear_messages_older_than(app: Application, storage: Storage, chat_id:
     # Drop every attempted record regardless of outcome - a failed delete is
     # almost always permanent, so retrying it on a future /clear would just
     # repeat the same failure.
-    storage.delete_sent_message_records(message_ids)
+    storage.delete_sent_message_records(chat_id, message_ids)
     return deleted, failed

@@ -28,7 +28,7 @@ def main() -> None:
     _configure_logging(config)
 
     amazon = AmazonClient(config)
-    storage = Storage(config.db_path)
+    storage = Storage(config.db_path, legacy_messages_chat_id=config.telegram_chat_id)
     app = build_application(config, amazon, storage)
 
     mqtt_client = mqtt_publisher.connect(config)

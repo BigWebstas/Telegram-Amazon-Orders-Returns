@@ -12,6 +12,8 @@ code delivery are implemented, reverse-engineered from a real walkthrough
 1. Copy `.env.example` to `.env` and fill in your Amazon credentials, your
    Telegram bot token (from [@BotFather](https://t.me/BotFather)), and your
    Telegram chat id (from [@userinfobot](https://t.me/userinfobot)).
+   Optionally set `TELEGRAM_RETURNS_CHAT_ID` to get returns in their own
+   chat - see [Separate returns chat](#separate-returns-chat).
 2. Build the image:
    ```
    docker compose build
@@ -65,6 +67,24 @@ default 30) and pushes a message the moment it sees:
 On the very first poll after install, existing orders/transactions are
 recorded silently instead of all being reported as "new" - only changes
 from that point on get pushed.
+
+## Separate returns chat
+
+By default everything goes to `TELEGRAM_CHAT_ID`. Set
+`TELEGRAM_RETURNS_CHAT_ID` to split it in two:
+
+| Chat | Gets |
+| --- | --- |
+| `TELEGRAM_RETURNS_CHAT_ID` | 🔄 return started, return QR codes |
+| `TELEGRAM_CHAT_ID` | everything else: new orders, status updates, deliveries, transactions, session-expired alerts |
+
+To set it up, create a second chat (e.g. a group with the bot added), get
+its id, and put it in `.env` (or the Unraid template). Group ids are
+negative, e.g. `-1001234567890`. Leave it blank to keep everything in one
+chat.
+
+Commands work in either chat and reply in the chat they were sent from.
+`/clear` only clears the chat it's run in.
 
 ## Returns QR status
 
@@ -135,7 +155,8 @@ before installing on Unraid, since nothing is published until it runs once.
    [`templates/telegram-amazon-orders-returns.xml`](templates/telegram-amazon-orders-returns.xml).
    (Alternatively: **Docker → Add Container**, and paste the template's
    `Repository` value and each `Config` variable in by hand.)
-2. Fill in Amazon email/password, Telegram bot token, and Telegram chat id.
+2. Fill in Amazon email/password, Telegram bot token, and Telegram chat id
+   (plus **Telegram Returns Chat ID** if you want returns in their own chat).
    Leave **Data** pointed at its default appdata path — that's where the
    session cookies and sqlite DB persist.
 3. Start the container.
@@ -161,10 +182,6 @@ broken image in Apps.
 
 - Only the `TELEGRAM_CHAT_ID` (and `TELEGRAM_RETURNS_CHAT_ID`, if set) you
   configure is served; the bot ignores messages from any other chat.
-- Set `TELEGRAM_RETURNS_CHAT_ID` to split returns (and their QR codes) into
-  their own chat. Orders, status updates, deliveries, transactions and alerts
-  stay in `TELEGRAM_CHAT_ID`. Commands work in either chat and reply where
-  they were sent; `/clear` only clears the chat it's run in.
 - `amazon-orders` scrapes Amazon's website — there's no official API for
   this, so expect it to occasionally need re-login if Amazon changes its
   challenge flow or the session cookie expires.

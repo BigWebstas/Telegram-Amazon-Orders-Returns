@@ -115,6 +115,13 @@ def publish_discovery(client: mqtt.Client, config: Config) -> None:
         client.publish(topic, payload=json.dumps(payload), retain=True)
 
 
+def publish_availability(client: mqtt.Client, config: Config, available: bool) -> None:
+    """Flip the shared availability topic. Called with False when a poll
+    fails, so HA shows the sensors as unavailable instead of keeping the
+    last retained counts (e.g. yesterday's "arriving today") looking current."""
+    client.publish(_status_topic(config), payload="online" if available else "offline", retain=True)
+
+
 def publish_counts(
     client: mqtt.Client,
     config: Config,
@@ -136,3 +143,4 @@ def publish_counts(
     }
     for key, value in values.items():
         client.publish(f"{config.mqtt_topic_prefix}/{key}/state", payload=str(value), retain=config.mqtt_retain)
+    publish_availability(client, config, True)

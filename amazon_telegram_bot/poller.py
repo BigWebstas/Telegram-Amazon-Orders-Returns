@@ -199,6 +199,11 @@ async def _poll_once(
     storage.set_last_poll_at(datetime.datetime.utcnow().isoformat())
 
 
+def _mark_sensors_stale(mqtt_client: mqtt.Client | None, config: Config) -> None:
+    if mqtt_client:
+        mqtt_publisher.publish_availability(mqtt_client, config, False)
+
+
 async def run(
     config: Config,
     amazon: AmazonClient,
@@ -223,7 +228,9 @@ async def run(
                 )
                 already_alerted_auth_failure = True
             logger.warning("Amazon session not ready, skipping this poll cycle.")
+            _mark_sensors_stale(mqtt_client, config)
         except Exception:
             logger.exception("Unexpected error during poll cycle.")
+            _mark_sensors_stale(mqtt_client, config)
 
         await asyncio.sleep(config.poll_interval_minutes * 60)

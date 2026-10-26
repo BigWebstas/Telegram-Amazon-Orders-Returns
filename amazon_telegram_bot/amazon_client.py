@@ -60,11 +60,11 @@ class AmazonClient:
 
     def fetch_recent_orders(self, time_filter: str = "last30"):
         self.ensure_logged_in()
-        return AmazonOrders(self._session).get_order_history(time_filter=time_filter)
+        return AmazonOrders(self._session).get_orders(time_filter=time_filter)
 
     def fetch_orders_for_year(self, year: int):
         self.ensure_logged_in()
-        return AmazonOrders(self._session).get_order_history(year=year)
+        return AmazonOrders(self._session).get_orders(year=year)
 
     def fetch_transactions(self, days: int = 365):
         # amazonorders defaults to days=365, which means every poll re-fetches

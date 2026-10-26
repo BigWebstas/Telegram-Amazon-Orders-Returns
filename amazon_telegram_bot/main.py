@@ -21,6 +21,7 @@ def _configure_logging(config: Config) -> None:
     stream_handler.setFormatter(formatter)
 
     logging.basicConfig(level=logging.INFO, handlers=[stream_handler, file_handler])
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def main() -> None:

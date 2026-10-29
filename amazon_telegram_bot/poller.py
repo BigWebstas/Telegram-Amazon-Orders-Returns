@@ -132,7 +132,16 @@ async def _poll_once(
             order.order_number, status, now, order.grand_total, order.cancelled, _item_description(order)
         )
 
-    transactions = await asyncio.to_thread(amazon.fetch_transactions, config.transaction_lookback_days)
+    try:
+        transactions = await asyncio.to_thread(amazon.fetch_transactions, config.transaction_lookback_days)
+    except SessionNotReady:
+        raise
+    except Exception:
+        # The transactions page is parsed separately from orders and breaks on
+        # its own (e.g. Amazon re-auth prompts or markup changes). That must
+        # not stop order and return tracking in the same poll cycle.
+        logger.exception("Fetching transactions failed; continuing with returns.")
+        transactions = []
     for transaction in transactions:
         key = f"{transaction.order_number}:{transaction.completed_date}:{transaction.grand_total}"
         if not storage.is_new_transaction(key):

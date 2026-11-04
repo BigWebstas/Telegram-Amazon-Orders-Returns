@@ -109,6 +109,17 @@ class Storage:
             ).fetchone()
             return row[0] if row else None
 
+    def is_new_order(self, order_number: str) -> bool:
+        # Separate from get_order_status: an order with no shipment (e.g. an
+        # eGift card) is stored with a NULL status, which must not read as
+        # "never seen".
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM seen_orders WHERE order_number = ?",
+                (order_number,),
+            ).fetchone()
+            return row is None
+
     def upsert_order(
         self,
         order_number: str,

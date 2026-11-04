@@ -102,8 +102,8 @@ async def _poll_once(
     for order in orders:
         status = order.shipments[0].delivery_status if order.shipments else None
         previous_status = storage.get_order_status(order.order_number)
-        is_new = previous_status is None
-        changed = previous_status is not None and previous_status != status
+        is_new = storage.is_new_order(order.order_number)
+        changed = not is_new and previous_status != status
         became_delivered = changed and _is_delivered_status(status) and not _is_delivered_status(previous_status)
 
         notified = True  # nothing to deliver this cycle unless a branch below sends something
